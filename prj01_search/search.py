@@ -145,8 +145,6 @@ def breadthFirstSearch(problem: SearchProblem):
 
 def uniformCostSearch(problem: SearchProblem):
     """Search the node of least total cost first."""
-    # TODO: how to track the path when reaching a goal?
-
     init = problem.getStartState()
     is_goal = problem.isGoalState
     frontier = util.PriorityQueue()
@@ -202,8 +200,62 @@ def nullHeuristic(state, problem=None):
 
 def aStarSearch(problem: SearchProblem, heuristic=nullHeuristic):
     """Search the node that has the lowest combined cost and heuristic first."""
-    "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
+
+    init = problem.getStartState()
+    is_goal = problem.isGoalState
+    frontier = util.PriorityQueue()
+    actions = []
+    frontier.push((init, actions), heuristic(init, problem) + 0)
+    visited = set()
+    seen = set()
+    seen.add(init)
+
+    while not frontier.isEmpty():
+        state, actions = frontier.pop()
+        visited.add(state)
+        # print("visiting: ", state)
+
+        if is_goal(state):
+            return actions
+
+        successors = problem.getSuccessors(state)
+
+        for next_state, next_action, step_cost in successors:
+            if next_state not in seen:
+                seen.add(next_state)
+                acc_actions = actions + [next_action]
+                cost_of_actions = problem.getCostOfActions(actions)
+                total_cost = (
+                    heuristic(next_state, problem) + cost_of_actions + step_cost
+                )
+                frontier.push((next_state, acc_actions), total_cost)
+                # print(
+                #     "push new state:",
+                #     (next_state, acc_actions),
+                #     "h_cost",
+                #     heuristic(state, problem),
+                #     "step_cost",
+                #     cost_of_actions + step_cost,
+                # )
+            elif next_state not in visited:  # has seen but not visited
+                acc_actions = actions + [next_action]
+                cost_of_actions = problem.getCostOfActions(actions)
+                total_cost = (
+                    heuristic(next_state, problem) + cost_of_actions + step_cost
+                )
+                frontier.update(
+                    (next_state, acc_actions),
+                    total_cost,
+                    key_fn=lambda x: x[0],  # Needed to pick the high priority path
+                )
+                # print(
+                #     "update existing state:",
+                #     (next_state, acc_actions),
+                #     "h_cost",
+                #     heuristic(state, problem),
+                #     "step_cost",
+                #     cost_of_actions + step_cost,
+                # )
 
 
 # Abbreviations
