@@ -4,7 +4,7 @@
 # educational purposes provided that (1) you do not distribute or publish
 # solutions, (2) you retain this notice, and (3) you provide clear
 # attribution to UC Berkeley, including a link to http://ai.berkeley.edu.
-# 
+#
 # Attribution Information: The Pacman AI projects were developed at UC Berkeley.
 # The core projects and autograders were primarily created by John DeNero
 # (denero@cs.berkeley.edu) and Dan Klein (klein@cs.berkeley.edu).
@@ -18,6 +18,7 @@ Pacman agents (in searchAgents.py).
 """
 
 import util
+
 
 class SearchProblem:
     """
@@ -68,9 +69,11 @@ def tinyMazeSearch(problem):
     sequence of moves will be incorrect, so only use this for tinyMaze.
     """
     from game import Directions
+
     s = Directions.SOUTH
     w = Directions.WEST
-    return  [s, s, w, s, w, w, s, w]
+    return [s, s, w, s, w, w, s, w]
+
 
 def depthFirstSearch(problem: SearchProblem):
     """
@@ -86,18 +89,58 @@ def depthFirstSearch(problem: SearchProblem):
     print("Is the start a goal?", problem.isGoalState(problem.getStartState()))
     print("Start's successors:", problem.getSuccessors(problem.getStartState()))
     """
-    "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
+    init = problem.getStartState()
+    is_goal = problem.isGoalState
+    frontier = util.Stack()
+    actions = []
+    frontier.push((init, actions))
+    visited = set()
+
+    while not frontier.isEmpty():
+        state, actions = frontier.pop()
+        visited.add(state)
+        if is_goal(state):
+            return actions
+        successors = problem.getSuccessors(state)
+        # if successors:
+        #     successors.reverse()
+        for next_state, next_action, stepCost in successors:
+            if next_state not in visited:
+                visited.add(next_state)
+                next_actions = actions + [next_action]
+                frontier.push([next_state, next_actions])
+
+    raise Exception("No valid path to goal is found after exhausted the graph.")
+
 
 def breadthFirstSearch(problem: SearchProblem):
     """Search the shallowest nodes in the search tree first."""
-    "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
+    init = problem.getStartState()
+    print(f"start state: {init}")
+    is_goal = problem.isGoalState
+    frontier = util.Queue()
+    actions = []
+    frontier.push((init, actions))
+    visited = set()
+    visited.add(init)
+
+    while not frontier.isEmpty():
+        state, actions = frontier.pop()
+        if is_goal(state):
+            return actions
+        successors = problem.getSuccessors(state)
+        for next_state, next_action, stepCost in successors:
+            if next_state not in visited:
+                visited.add(next_state)
+                next_actions = actions + [next_action]
+                frontier.push([next_state, next_actions])
+
 
 def uniformCostSearch(problem: SearchProblem):
     """Search the node of least total cost first."""
     "*** YOUR CODE HERE ***"
     util.raiseNotDefined()
+
 
 def nullHeuristic(state, problem=None):
     """
@@ -105,6 +148,7 @@ def nullHeuristic(state, problem=None):
     goal in the provided SearchProblem.  This heuristic is trivial.
     """
     return 0
+
 
 def aStarSearch(problem: SearchProblem, heuristic=nullHeuristic):
     """Search the node that has the lowest combined cost and heuristic first."""
