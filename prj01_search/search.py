@@ -107,8 +107,8 @@ def depthFirstSearch(problem: SearchProblem):
         for next_state, next_action, stepCost in successors:
             if next_state not in visited:
                 visited.add(next_state)
-                next_actions = actions + [next_action]
-                frontier.push([next_state, next_actions])
+                acc_actions = actions + [next_action]
+                frontier.push([next_state, acc_actions])
 
     raise Exception("No valid path to goal is found after exhausted the graph.")
 
@@ -116,30 +116,80 @@ def depthFirstSearch(problem: SearchProblem):
 def breadthFirstSearch(problem: SearchProblem):
     """Search the shallowest nodes in the search tree first."""
     init = problem.getStartState()
-    print(f"start state: {init}")
     is_goal = problem.isGoalState
+    if is_goal(init):
+        return []
+
     frontier = util.Queue()
     actions = []
     frontier.push((init, actions))
-    visited = set()
-    visited.add(init)
+
+    seen = set()
+    seen.add(init)
 
     while not frontier.isEmpty():
         state, actions = frontier.pop()
+
         if is_goal(state):
             return actions
+
         successors = problem.getSuccessors(state)
-        for next_state, next_action, stepCost in successors:
-            if next_state not in visited:
-                visited.add(next_state)
-                next_actions = actions + [next_action]
-                frontier.push([next_state, next_actions])
+
+        for next_state, next_action, step_cost in successors:
+            if next_state not in seen:
+                seen.add(next_state)
+                acc_actions = actions + [next_action]
+                cost_of_actions = problem.getCostOfActions(actions)
+                frontier.push((next_state, acc_actions))
 
 
 def uniformCostSearch(problem: SearchProblem):
     """Search the node of least total cost first."""
-    "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
+    # TODO: how to track the path when reaching a goal?
+
+    init = problem.getStartState()
+    is_goal = problem.isGoalState
+    frontier = util.PriorityQueue()
+    actions = []
+    frontier.push((init, actions), 0)
+    visited = set()
+    seen = set()
+    seen.add(init)
+
+    while not frontier.isEmpty():
+        state, actions = frontier.pop()
+        visited.add(state)
+        # print("visiting: ", state)
+
+        if is_goal(state):
+            return actions
+
+        successors = problem.getSuccessors(state)
+
+        for next_state, next_action, step_cost in successors:
+            if next_state not in seen:
+                seen.add(next_state)
+                acc_actions = actions + [next_action]
+                cost_of_actions = problem.getCostOfActions(actions)
+                frontier.push((next_state, acc_actions), cost_of_actions + step_cost)
+                # print(
+                #     "push new state:",
+                #     (next_state, acc_actions),
+                #     cost_of_actions + step_cost,
+                # )
+            elif next_state not in visited:  # has seen but not visited
+                acc_actions = actions + [next_action]
+                cost_of_actions = problem.getCostOfActions(actions)
+                frontier.update(
+                    (next_state, acc_actions),
+                    cost_of_actions + step_cost,
+                    key_fn=lambda x: x[0],  # Needed to pick the high priority path
+                )
+                # print(
+                #     "update existing state:",
+                #     (next_state, acc_actions),
+                #     cost_of_actions + step_cost,
+                # )
 
 
 def nullHeuristic(state, problem=None):
