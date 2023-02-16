@@ -35,6 +35,7 @@ Good luck and happy searching!
 """
 
 from typing import List, Tuple, Any
+from game import Grid
 from game import Directions
 from game import Agent
 from game import Actions
@@ -360,6 +361,24 @@ class CornersProblem(search.SearchProblem):
         return len(actions)
 
 
+import functools
+
+@functools.lru_cache(maxsize=None)
+def expand_corner_zone(corners, walls, zone_range):
+    zones = []
+    top, right = walls.height-2, walls.width-2
+    for pos in corners:
+        zone = [pos]
+        for dx in range(-zone_range, zone_range):
+            for dy in range(-zone_range, zone_range):
+                nx = pos[0] + dx
+                ny = pos[1] + dy
+                if (nx >= 1 and nx <= right) and (ny >= 1 and ny <= top):
+                    if not walls[nx][ny]:
+                        zone.append((nx, ny))
+        zones.append(zone)
+    return zones
+
 def cornersHeuristic(state: Any, problem: CornersProblem):
     """
     A heuristic for the CornersProblem that you defined.
@@ -375,6 +394,9 @@ def cornersHeuristic(state: Any, problem: CornersProblem):
     """
     corners = problem.corners # These are the corner coordinates
     walls = problem.walls # These are the walls of the maze, as a Grid (game.py)
+
+    def zone_dis(x, y, zone):
+        return min(util.manhattanDistance((x, y), pos) for pos in zone)
 
     def idea1(state, problem):
         # idea1: Manhattan distance for corners need visit
@@ -393,7 +415,7 @@ def cornersHeuristic(state: Any, problem: CornersProblem):
         dis = 0
         x, y = state[0]
         cornerVisited = list(state[1])
-        for i, pos in enumerate(problem.corners):
+        for i, pos in enumerate(corners):
             if not cornerVisited[i]:
                 if dis == 0:
                     dis = util.manhattanDistance((x, y), pos)
@@ -419,7 +441,26 @@ def cornersHeuristic(state: Any, problem: CornersProblem):
         else:
             return 0
 
-    return idea2(state, problem)
+    def idea4(state, problem):
+        """
+        idea 4: expand each corner to a hot zone, and pick minimal Manhattan distance 
+        from hot zone to agent pos as heuristic; a generalization of idea #2.
+
+        Fail: when the agent is within the hot zone, generate trivial outcome
+        """
+        dis = 0
+        x, y = state[0]
+        cornerVisited = list(state[1])
+
+        zones = expand_corner_zone(corners, walls, 0)
+        zones = [zones[i] for i in [j for j, _ in enumerate(zones) if not cornerVisited[j]]]
+
+        if not zones:
+            return 0
+
+        return min(zone_dis(x, y, z) for z in zones)
+
+    return idea4(state, problem)
 
 
 class AStarCornersAgent(SearchAgent):
@@ -513,8 +554,77 @@ def foodHeuristic(state: Tuple[Tuple, List[List]], problem: FoodSearchProblem):
     problem.heuristicInfo['wallCount']
     """
     position, foodGrid = state
-    "*** YOUR CODE HERE ***"
-    return 0
+
+    # idea 1:
+    # food_count, compute food value as connected food cell
+    # distance_val, Compute m_distance to each food O(n)
+    # h = distance/food_count
+
+    def food_neighbors(food):
+        x, y = food
+        result = []
+        dirs = [(0, 1), (0, -1), (-1, 0), (1, 0)]
+        for dir in dirs:
+            nx = x + dir[0]
+            ny = y + dir[1]
+            try:
+                if foodGrid[nx][ny]:
+                    result.append((nx, ny))
+            except IndexError as e:
+                pass
+        return result
+
+    def dfs(food, visited):
+        fringe = util.Stack()
+        fringe.push(food)
+        local_visited = set()
+        while not fringe.isEmpty():
+            food = fringe.pop()
+            visited.add(food)
+            local_visited.add(food)
+            neighbors = food_neighbors(food)
+            # print(f"food: {food}, neighbors: {neighbors}")
+            for n in neighbors:
+                if n not in visited:
+                    fringe.push(n)
+        return list(local_visited)
+
+    def find_connected_food(foodGrid):
+        visited = set()
+        cluster = []
+        # dfs to find all connected food
+        for food in foodGrid.asList():
+            if food not in visited:
+                # print(f"dfs on {food}")
+                connected_food = dfs(food, visited)
+                cluster.append(connected_food )
+                # print("connected_food", connected_food)
+        return cluster
+
+    def compute_food_value(cluster):
+        valueGrid = Grid(foodGrid.width, foodGrid.height, 0)
+        for group in cluster:
+            val = len(group)
+            for food in group:
+                valueGrid[food[0]][food[1]] = val
+        return valueGrid
+
+    if 'valGrid' not in problem.heuristicInfo:
+        cluster = find_connected_food(foodGrid)
+        problem.heuristicInfo['valGrid'] = compute_food_value(cluster)
+        problem.heuristicInfo['foodCount'] = foodGrid.count()
+        # problem.heuristicInfo['maxFoodVal'] = max([1] + [len(group) for group in cluster])
+
+    # END Of pre computation
+    if foodGrid.count() == 0:
+        return 0
+    
+    # WTF? The new information is not useful, the best result is at w1 = 1.0
+    w1 = 1.0
+    w2 = 5 / problem.heuristicInfo['foodCount'] 
+    h_grid = [w1 * util.manhattanDistance(position, food) + w2 * problem.heuristicInfo['valGrid'][food[0]][food[1]] for food in foodGrid.asList()]
+
+    return sum(h_grid) / foodGrid.count()
 
 class ClosestDotSearchAgent(SearchAgent):
     "Search for all food using a sequence of searches"
