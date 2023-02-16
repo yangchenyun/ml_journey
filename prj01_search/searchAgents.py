@@ -39,6 +39,8 @@ from game import Grid
 from game import Directions
 from game import Agent
 from game import Actions
+import itertools
+from statistics import mean
 import util
 import time
 import search
@@ -611,20 +613,66 @@ def foodHeuristic(state: Tuple[Tuple, List[List]], problem: FoodSearchProblem):
 
     if 'valGrid' not in problem.heuristicInfo:
         cluster = find_connected_food(foodGrid)
+        problem.heuristicInfo['cluster'] = cluster
         problem.heuristicInfo['valGrid'] = compute_food_value(cluster)
         problem.heuristicInfo['foodCount'] = foodGrid.count()
-        # problem.heuristicInfo['maxFoodVal'] = max([1] + [len(group) for group in cluster])
+        problem.heuristicInfo['maxFoodVal'] = max([0] + [len(group) for group in cluster])
 
     # END Of pre computation
     if foodGrid.count() == 0:
         return 0
     
-    # WTF? The new information is not useful, the best result is at w1 = 1.0
-    w1 = 1.0
-    w2 = 5 / problem.heuristicInfo['foodCount'] 
-    h_grid = [w1 * util.manhattanDistance(position, food) + w2 * problem.heuristicInfo['valGrid'][food[0]][food[1]] for food in foodGrid.asList()]
+    # NOTE idea 1: if the cell's food value is higher than 1 (cluster of foods), reduce the distance cost
+    # Result, only improves the condition when the clustering information is discarded
+    #
+    # fc = float(problem.heuristicInfo['maxFoodVal'])
+    # max_fval = (fc * fc) # Max value is when all food are connected
+    # dis_sum = sum([
+    #     util.manhattanDistance(position, food) * (problem.heuristicInfo['valGrid'][food[0]][food[1]] / max_fval)
+    #      for food in foodGrid.asList()])
+    # return dis_sum
+    # 
+    # dis_sum = sum([util.manhattanDistance(position, food) for food in foodGrid.asList()]) / foodGrid.count()
+    # val_sum = sum([problem.heuristicInfo['valGrid'][food[0]][food[1]] / max_fval
+    #                for food in foodGrid.asList()])
 
-    return sum(h_grid) / foodGrid.count()
+    # WTF? The new information is not useful, the best result is at w1 = 1.0
+    # Best: 11254
+    # w1 = 1.0
+    # w2 = 0.0 / problem.heuristicInfo['foodCount'] 
+    # h_grid = [w1 * util.manhattanDistance(position, food) + w2 * problem.heuristicInfo['valGrid'][food[0]][food[1]] for food in foodGrid.asList()]
+
+    # return sum(h_grid) / foodGrid.count()
+
+    # NOTE: idea 2, use the nearest food node in a cluster to compute m_distance
+    # Result: not working as well as using the sum of manhatten distance, why?
+    cluster = problem.heuristicInfo['cluster']
+
+    def effective_dis(group):
+        m_dis = [util.euclideanDistance(position, food) for food in group if food in foodGrid.asList()]
+        if not m_dis:
+            return []
+
+        # Equivalent of idea #1, just use the manhattan distance
+        # Result: man dis 11254; euc dis: 11896
+        result = m_dis
+
+        # Use the minimal distance in the group
+        # Result: man dis 11593; euc dis: 12161
+        # min_dis = min(m_dis)
+        # result = [min_dis] * len(m_dis)
+
+        # Use max, but divided by group member number; incentive large group
+        # Result: man dis, 13652; euc dis, 14182
+        # max_dis = max(m_dis)
+        # dis = max_dis * 1.0 / len(group)
+        # result = [dis] * len(m_dis)
+
+        # How to incentive towards movement to large group?
+
+        return result
+
+    return mean(itertools.chain(*[effective_dis(group) for group in cluster]))
 
 class ClosestDotSearchAgent(SearchAgent):
     "Search for all food using a sequence of searches"
