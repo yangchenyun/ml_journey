@@ -601,8 +601,10 @@ def foodHeuristic(state: Tuple[Tuple, List[List]], problem: FoodSearchProblem):
     pacmanPos, food = state
     foodLeft = food.asList()
     adjM = foodAdjMatrixAfterEating(problem, foodLeft)
-    mstTotalW = minimumSpanningTreeTotalWeight(adjM)
+    # The minimal length to traverse all the food
+    mstTotalW = minimumSpanningTreeTotalWeight(adjM) 
     distToPacman = partial(problem.heuristicInfo['mazeDistFn'], pacmanPos)
+    # The distance to the closet node on the tree
     closestFood = min(map(distToPacman, foodLeft), default=0)
     return closestFood + mstTotalW
 

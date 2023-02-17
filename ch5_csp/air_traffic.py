@@ -1,4 +1,6 @@
+from functools import partial
 import copy
+import inspect
 
 
 class Queue:
@@ -162,6 +164,13 @@ def backtracking(csp, assignment):
     return None
 
 
+def build_csp_graph(csp, rules):
+    for r in rules:
+        name_x, name_y = inspect.getargspec(r)[0]
+        csp.graph[name_x] = csp.graph.get(name_x) or {}
+        csp.graph[name_x][name_y] = csp.graph[name_x].get(name_y) or [r]
+
+
 class Struct:
     def __init__(self, **entries):
         self.__dict__.update(entries)
@@ -178,23 +187,21 @@ if __name__ == "__main__":
                 "x4": [3, 4],
                 "x5": [1, 2, 3, 4],
             },
-            "graph": {
-                "x1": {
-                    "x2": [lambda x1, x2: x1 != x2],
-                    "x3": [lambda x1, x3: x1 != x3],
-                },
-                "x2": {
-                    "x1": [lambda x2, x1: x1 != x2],
-                    "x3": [lambda x2, x3: x2 != x3],
-                },
-                "x3": {
-                    "x1": [lambda x3, x1: x1 != x3],
-                    "x4": [lambda x3, x4: x4 < x3],
-                },
-                "x4": {"x3": [lambda x4, x3: x4 < x3], "x5": [lambda x4, x5: x4 != x5]},
-                "x5": {"x4": [lambda x5, x4: x4 != x5]},
-            },
+            "graph": {},
         }
     )
+    rules = [
+        lambda x1, x2: x1 != x2,
+        lambda x2, x1: x1 != x2,
+        lambda x1, x3: x1 != x3,
+        lambda x3, x1: x1 != x3,
+        lambda x2, x3: x2 != x3,
+        lambda x3, x2: x2 != x3,
+        lambda x3, x4: x4 < x3,
+        lambda x4, x3: x4 < x3,
+        lambda x4, x5: x4 != x5,
+        lambda x5, x4: x4 != x5,
+    ]
+    build_csp_graph(csp, rules)
 
     print(backtracking(csp, {}))
