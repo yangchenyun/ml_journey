@@ -25,7 +25,7 @@ from pacman import GameState
 from search import mazeDistance
 
 
-VERBOSE = False
+VERBOSE = True
 
 
 class ReflexAgent(Agent):
@@ -80,117 +80,7 @@ class ReflexAgent(Agent):
         """
         # Useful information you can extract from a GameState (pacman.py)
         successorGameState = currentGameState.generatePacmanSuccessor(action)
-        newPos = successorGameState.getPacmanPosition()
-        newFood = successorGameState.getFood()
-        newCapsules = successorGameState.getCapsules()
-        newGhostStates = successorGameState.getGhostStates()
-        newScaredTimes = [ghostState.scaredTimer for ghostState in newGhostStates]
-        walls = currentGameState.getWalls()
-        top, right = walls.height - 2, walls.width - 2
-        corners = ((1, 1), (1, top), (right, 1), (right, top))
-
-        def wall_test(pos):
-            x, y = pos
-            result = walls[x][y]
-
-        food_list = newFood.asList()
-        ghost_list = [
-            (
-                int(state.configuration.getPosition()[0]),
-                int(state.configuration.getPosition()[1]),
-            )
-            for state in newGhostStates
-        ]
-
-        # IDEA 1 - The evaluation is a linear combination of the following features:
-        #
-        # - Manhattan distance to remaining food (TODO: use MST)
-        # - Distance to ghost (A* search), if scare time
-        # - Distance to capsule (A* search)
-        # - Scores
-        # - ...
-        #
-        total_score = 0.0
-
-        score_w = 10.0
-        score = currentGameState.getScore() * score_w
-        total_score += score
-
-        # Worked VERY WELL!!
-        ghost_w = lambda t: 0.0 if t > 0 else -10.0
-        ghost_dis_fn = lambda dis: 1 / (dis - 0.5) ** 2 if dis != 0 else 1e10
-        ghost_dis_all = [
-            mazeDistance(successorGameState, newPos, pos) for pos in ghost_list
-        ]
-        ghost_score = mean(
-            ghost_w(t) * ghost_dis_fn(dis)
-            for dis, t in zip(ghost_dis_all, newScaredTimes)
-        )
-        for t in newScaredTimes:
-            if t <= 1:  # be careful when the timers is up
-                total_score += ghost_score
-        print("ghost_score:", ghost_score)
-
-        if food_list:
-            # Food policy, there is a bug
-            food_w = -1 / 10.0
-            # food_fn = lambda dis: min(
-            #     1.0, 1 / dis**2 if dis != 0 else 1e10
-            # )  # capped at 1.0, the closer the better
-            food_fn = lambda dis: math.log(dis)
-            # food_fn = lambda dis: -1 / (dis + 0.5) ** 2 if dis != 0 else 1e10
-            food_dis = sorted(manhattanDistance(newPos, food) for food in food_list)
-            min_food_dis = food_dis[0]
-            # NOTE: if using mean, will have issues towards the end
-            food_score = sum([food_w * food_fn(dis) for dis in food_dis])
-            total_score += food_score
-
-            # Food count to encourage eating
-            food_c_w = -1.0
-            food_c_score = food_c_w * len(food_list)
-            total_score += food_c_score
-
-            # Prioritize corner food
-            corner_w = -1.0 / 3.0
-            food_corners = [c for c in corners if c in food_list]
-            corner_dis = [manhattanDistance(newPos, corner) for corner in food_corners]
-            corner_score = sum([corner_w * food_fn(dis) for dis in corner_dis])
-            total_score += corner_score
-            print("corner_score:", corner_score)
-
-            # Add noise to break ties when close
-            if min_food_dis < 2:
-                seed = {
-                    Directions.NORTH: 1,
-                    Directions.SOUTH: 2,
-                    Directions.EAST: 3,
-                    Directions.WEST: 4,
-                    Directions.STOP: 5,
-                }
-                random.seed(
-                    total_score + seed[action] * 100 + newPos[0] * 10 + newPos[1]
-                )
-                random_score = 1.0 * random.random()
-                total_score += random_score
-
-            print("food_score:", food_score)
-
-        # penalize no action
-        # stop_w = -1.0
-        # stop_score = stop_w * (1.0 if action == Directions.STOP else 0.0)
-        # total_score += stop_score
-
-        if newCapsules:
-            capsule_w = -1.0
-            capsule_dis = [
-                manhattanDistance(newPos, capsule) for capsule in newCapsules
-            ]
-            capsule_score = sum([capsule_w * food_fn(dis) for dis in capsule_dis])
-            total_score += capsule_score
-            print("capsule_score:", capsule_score)
-
-        # print(f"total_score: {total_score}")
-        return total_score
+        return betterEvaluationFunction(successorGameState)
 
         #
         # IDEA 2 - Zone Boost
@@ -293,8 +183,6 @@ class ReflexAgent(Agent):
         # for t in newScaredTimes:
         #     if t > 0:
         #         score += 100  # compensate for capsure loss
-
-        return score
 
 
 def scoreEvaluationFunction(currentGameState: GameState):
@@ -624,28 +512,21 @@ def betterEvaluationFunction(currentGameState: GameState):
     # - Distance to capsule (A* search)
     # - Scores
     # - ...
-    #
-    total_score = 0.0
+    score_board = {}
 
     score_w = 5.0
-    score = currentGameState.getScore() * score_w
-    total_score += score
-    if VERBOSE:
-        print("\n\ngame_score:", score)
+    score_board["game_score"] = currentGameState.getScore() * score_w
 
     # Worked VERY WELL!!
     # When there is timer, priotize eating ghost
-    ghost_w = lambda t: 10.0 if t > 0 else -10.0
+    ghost_w = lambda t: 10.0 if t >= 1 else -10.0
     ghost_dis_fn = lambda dis: 1 / (dis - 0.5) ** 2 if dis != 0 else 1e10
     ghost_dis_all = [mazeDistance(currentGameState, newPos, pos) for pos in ghost_list]
     ghost_score = mean(
         ghost_w(t) * ghost_dis_fn(dis) for dis, t in zip(ghost_dis_all, newScaredTimes)
     )
     for t in newScaredTimes:
-        if t <= 1:  # be careful when the timers is up
-            total_score += ghost_score
-    if VERBOSE:
-        print("ghost_score:", ghost_score)
+        score_board["ghost_score"] = ghost_score
 
     food_fn = lambda dis: math.log(dis)
     if food_list:
@@ -661,30 +542,25 @@ def betterEvaluationFunction(currentGameState: GameState):
         min_food_dis = food_dis[0]
         # NOTE: if using mean, will have issues towards the end
         food_score = sum([food_w * food_fn(dis) for dis in food_dis])
-        total_score += food_score
+        score_board["food_score"] = food_score
 
         # Food count to encourage eating
         food_c_w = -1.0
         food_c_score = food_c_w * len(food_list)
-        total_score += food_c_score
+        score_board["food_c_score"] = food_c_score
 
         # Prioritize corner food
         corner_w = -1.0 / 3.0
-        food_corners = [c for c in corners if c in food_list]
+        food_corners = [c for c in corners if c in food_list + newCapsules]
         corner_dis = [manhattanDistance(newPos, corner) for corner in food_corners]
         corner_score = sum([corner_w * food_fn(dis) for dis in corner_dis])
-        total_score += corner_score
-        if VERBOSE:
-            print("corner_score:", corner_score)
+        score_board["corner_score"] = corner_score
 
         # Add noise to break ties when close
         if min_food_dis < 2:
-            random.seed(total_score + newPos[0] * 10 + newPos[1])
+            random.seed(newPos[0] * 10 + newPos[1])
             random_score = 1.0 * random.random()
-            total_score += random_score
-
-        if VERBOSE:
-            print("food_score:", food_score)
+            score_board["random_score"] = random_score
 
     # Incentivize eating capsule
     if newCapsules:
@@ -694,15 +570,17 @@ def betterEvaluationFunction(currentGameState: GameState):
         ]
         capsule_score = sum([capsule_w * food_fn(dis) for dis in capsule_dis])
 
-        capsule_c_w = -200.0
+        capsule_c_w = -100.0
         capsule_c_score = capsule_c_w * len(newCapsules)
-        total_score += capsule_c_score
 
-        if VERBOSE:
-            print("capsule_score:", capsule_score, capsule_c_score)
+        score_board["capsule_score"] = capsule_score
+        score_board["capsule_c_score"] = capsule_c_score
+
+    total_score = sum(score_board.values())
 
     if VERBOSE:
         print(f"total_score: {total_score}")
+
     return total_score
 
 
