@@ -25,6 +25,9 @@ from pacman import GameState
 from search import mazeDistance
 
 
+VERBOSE = False
+
+
 class ReflexAgent(Agent):
     """
     A reflex agent chooses an action at each choice point by examining
@@ -624,13 +627,15 @@ def betterEvaluationFunction(currentGameState: GameState):
     #
     total_score = 0.0
 
-    score_w = 10.0
+    score_w = 5.0
     score = currentGameState.getScore() * score_w
     total_score += score
-    print("\n\ngame_score:", score)
+    if VERBOSE:
+        print("\n\ngame_score:", score)
 
     # Worked VERY WELL!!
-    ghost_w = lambda t: 0.0 if t > 0 else -10.0
+    # When there is timer, priotize eating ghost
+    ghost_w = lambda t: 10.0 if t > 0 else -10.0
     ghost_dis_fn = lambda dis: 1 / (dis - 0.5) ** 2 if dis != 0 else 1e10
     ghost_dis_all = [mazeDistance(currentGameState, newPos, pos) for pos in ghost_list]
     ghost_score = mean(
@@ -639,17 +644,20 @@ def betterEvaluationFunction(currentGameState: GameState):
     for t in newScaredTimes:
         if t <= 1:  # be careful when the timers is up
             total_score += ghost_score
-    print("ghost_score:", ghost_score)
+    if VERBOSE:
+        print("ghost_score:", ghost_score)
 
+    food_fn = lambda dis: math.log(dis)
     if food_list:
         # Food policy, there is a bug
         food_w = -1 / 10.0
-        # food_fn = lambda dis: min(
-        #     1.0, 1 / dis**2 if dis != 0 else 1e10
-        # )  # capped at 1.0, the closer the better
-        food_fn = lambda dis: math.log(dis)
-        # food_fn = lambda dis: -1 / (dis + 0.5) ** 2 if dis != 0 else 1e10
-        food_dis = sorted(manhattanDistance(newPos, food) for food in food_list)
+        distance_fn = (
+            manhattanDistance
+            if len(food_list) > 5
+            else functools.partial(mazeDistance, currentGameState)
+        )
+
+        food_dis = sorted(distance_fn(newPos, food) for food in food_list)
         min_food_dis = food_dis[0]
         # NOTE: if using mean, will have issues towards the end
         food_score = sum([food_w * food_fn(dis) for dis in food_dis])
@@ -666,7 +674,8 @@ def betterEvaluationFunction(currentGameState: GameState):
         corner_dis = [manhattanDistance(newPos, corner) for corner in food_corners]
         corner_score = sum([corner_w * food_fn(dis) for dis in corner_dis])
         total_score += corner_score
-        print("corner_score:", corner_score)
+        if VERBOSE:
+            print("corner_score:", corner_score)
 
         # Add noise to break ties when close
         if min_food_dis < 2:
@@ -674,51 +683,27 @@ def betterEvaluationFunction(currentGameState: GameState):
             random_score = 1.0 * random.random()
             total_score += random_score
 
-        print("food_score:", food_score)
+        if VERBOSE:
+            print("food_score:", food_score)
 
-    # penalize no action
-    # stop_w = -1.0
-    # stop_score = stop_w * (1.0 if action == Directions.STOP else 0.0)
-    # total_score += stop_score
-
+    # Incentivize eating capsule
     if newCapsules:
-        capsule_w = -1.0
-        capsule_dis = [manhattanDistance(newPos, capsule) for capsule in newCapsules]
+        capsule_w = -1.0 / 2
+        capsule_dis = [
+            mazeDistance(currentGameState, newPos, capsule) for capsule in newCapsules
+        ]
         capsule_score = sum([capsule_w * food_fn(dis) for dis in capsule_dis])
-        total_score += capsule_score
-        print("capsule_score:", capsule_score)
 
-    # print(f"total_score: {total_score}")
+        capsule_c_w = -200.0
+        capsule_c_score = capsule_c_w * len(newCapsules)
+        total_score += capsule_c_score
+
+        if VERBOSE:
+            print("capsule_score:", capsule_score, capsule_c_score)
+
+    if VERBOSE:
+        print(f"total_score: {total_score}")
     return total_score
-
-    #
-    # IDEA 2 - Zone Boost
-    #
-
-    def zone_expand(pos, r=1):
-        top, right = walls.height - 2, walls.width - 2
-        positions = [
-            (int(pos[0] + x), int(pos[1] + y))
-            for y in range(-r, r + 1)
-            for x in range(-r, r + 1)
-        ]
-        positions = [
-            (x, y)
-            for x, y in positions
-            if (x >= 0 and x <= right) and (y >= 0 and y <= top) and (not walls[x][y])
-        ]
-        return positions
-
-    dead_zone = [pos for g in ghost_list for pos in zone_expand(g, r=1)] + ghost_list
-    danger_zone = [pos for g in ghost_list for pos in zone_expand(g, r=2)]
-    bonus_zone = [pos for g in newCapsules for pos in zone_expand(g, r=2)]
-    food_zone = [pos for f in food_list for pos in zone_expand(f, r=5)]
-    neighbors = [
-        (newPos[0] + pos[0], newPos[1] + pos[1])
-        for pos in [(0, 1), (1, 0), (0, -1), (-1, 0)]
-    ]
-
-    return score
 
 
 better = betterEvaluationFunction
