@@ -414,11 +414,6 @@ class MinimaxAgent(MultiAgentSearchAgent):
                 ]
             )
 
-        # agentIndex = 0
-        # for action in gameState.getLegalActions(agentIndex):
-        #     for next_state in gameState.generateSuccessor(agentIndex, action):
-        #         print(next_state)
-
         score, action = visit_pacman(gameState, gameState.getNumAgents(), self.depth)
 
         return action
@@ -433,8 +428,84 @@ class AlphaBetaAgent(MultiAgentSearchAgent):
         """
         Returns the minimax action using self.depth and self.evaluationFunction
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+
+        def visit_pacman(gameState, agentNums, depth, alpha, beta):
+            """
+            => (score, action)
+            """
+            # print(f"[L#{depth}: visiting pacman")
+            if depth == 0:
+                return (self.evaluationFunction(gameState), None)
+
+            if gameState.isWin():
+                return (self.evaluationFunction(gameState), None)
+
+            if gameState.isLose():
+                return (self.evaluationFunction(gameState), None)
+
+            first_ghost = 1
+
+            result = (-math.inf, None)
+            for action in gameState.getLegalActions(0):
+                option = visit_ghost(
+                    gameState.generateSuccessor(0, action),
+                    first_ghost,
+                    agentNums,
+                    depth,
+                    alpha,
+                    beta,
+                )
+                if option > result[0]:
+                    result = (option, action)
+                    # NOTE: result would be at least option, which is larger than min's current choice, pruning
+                    if option > beta:
+                        return result
+
+                alpha = max(result[0], alpha)
+
+            return result
+
+        def visit_ghost(gameState, agentIndex, agentNums, depth, alpha, beta):
+            """
+            => (score, action)
+            """
+            # print(f"[L#{depth}: visiting agent #{agentIndex}, agentNums: {agentNums}")
+            # Deepen the depth after each agent has responded
+            if agentIndex == agentNums:
+                return visit_pacman(gameState, agentNums, depth - 1, alpha, beta)[0]
+
+            if gameState.isWin():
+                return self.evaluationFunction(gameState)
+
+            if gameState.isLose():
+                return self.evaluationFunction(gameState)
+
+            result = math.inf
+            for action in gameState.getLegalActions(agentIndex):
+                option = visit_ghost(
+                    gameState.generateSuccessor(agentIndex, action),
+                    agentIndex + 1,
+                    agentNums,
+                    depth,
+                    alpha,
+                    beta,
+                )
+
+                if option < result:
+                    result = option
+                    # NOTE: result would be at most option, which is smaller than max's current choice, pruning
+                    if option < alpha:
+                        return result
+
+                beta = min(result, beta)
+
+            return result
+
+        score, action = visit_pacman(
+            gameState, gameState.getNumAgents(), self.depth, -math.inf, math.inf
+        )
+
+        return action
 
 
 class ExpectimaxAgent(MultiAgentSearchAgent):
