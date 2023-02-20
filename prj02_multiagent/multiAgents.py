@@ -217,6 +217,94 @@ class MultiAgentSearchAgent(Agent):
         self.depth = int(depth)
 
 
+class MCTSNode:
+    def __init__(self, state, agentIndex, action, parent=None, U=0, N=0):
+        self.state = state
+        self.U = U
+        self.N = N
+        self.agentIndex = agentIndex
+        self.action = action
+        self.parent = parent
+        self.children = []
+
+    def addChildState(self, state, agentIndex, action):
+        child = MCTSNode(state, agentIndex, action, parent=self)
+        self.children.append(child)
+        return child
+
+    def isRoot(self):
+        return self.parent is None
+
+    def isLeaf(self):
+        return len(self.children) == 0
+
+
+def ucb(n: MCTSNode, C=1.4):
+    return (
+        math.inf if n.N == 0 else n.U / n.N + C * (math.log(n.parent.N) / n.N) ** 1 / 2
+    )
+
+
+class MCTSAgent(MultiAgentSearchAgent):
+    """Monte Carlo Tree Search using UCT"""
+
+    def getAction(self, gameState: GameState):
+        def select(n):
+            if n.isLeaf():
+                return n
+            else:
+                # select pacman / ghost with min/max
+                if n.agentIndex == self.index:
+                    return select(max(n.children, key=ucb))
+                else:
+                    return select(min(n.children, key=ucb))
+
+        def expand(n):
+            # For non terminal state, expand the tree
+            if (not n.children) and not (n.state.isLose() or n.state.isWin()):
+                for action in n.state.getLegalActions(n.agentIndex):
+                    n.addChildState(
+                        n.state.generateSuccessor(n.agentIndex, action),
+                        (n.agentIndex + 1) % gameState.getNumAgents(),
+                        action,
+                    )
+            return select(n)
+
+        def simulate(n: MCTSNode):
+            # simulate the play towards the end
+            state = n.state
+            agentIndex = n.agentIndex
+            local_depth = self.depth * gameState.getNumAgents()
+
+            while not (state.isLose() or state.isWin()) and local_depth > 0:
+                action = random.choice(state.getLegalActions(agentIndex))
+                state = state.generateSuccessor(agentIndex, action)
+                agentIndex = (agentIndex + 1) % gameState.getNumAgents()
+                local_depth -= 1
+
+            return self.evaluationFunction(state)
+
+        def backprop(n, utility):
+            n.U += utility
+            n.N += 1
+            if n.parent:
+                backprop(n.parent, utility)
+
+        # Build tree in respect to the depth
+        root = MCTSNode(gameState, self.index, "")
+
+        N = 100
+        for _ in range(N):
+            leaf = select(root)
+            child = expand(leaf)
+            result = simulate(child)
+            backprop(child, result)
+
+        max_state = sorted(root.children, key=lambda n: n.N)[-1]
+
+        return max_state.action
+
+
 class MinimaxAgent(MultiAgentSearchAgent):
     """
     Your minimax agent (question 2)
