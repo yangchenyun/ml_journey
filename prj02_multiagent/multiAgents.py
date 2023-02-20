@@ -520,8 +520,69 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
         All ghosts should be modeled as choosing uniformly at random from their
         legal moves.
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+
+        def visit_pacman(gameState, agentNums, depth):
+            """
+            => (score, action)
+            """
+            # print(f"[L#{depth}: visiting pacman")
+            if depth == 0:
+                return (self.evaluationFunction(gameState), None)
+
+            if gameState.isWin():
+                return (self.evaluationFunction(gameState), None)
+
+            if gameState.isLose():
+                return (self.evaluationFunction(gameState), None)
+
+            first_ghost = 1
+            # Max alternating
+            return functools.reduce(
+                lambda x, y: x if x[0] >= y[0] else y,
+                [
+                    (
+                        visit_ghost(
+                            gameState.generateSuccessor(0, action),
+                            first_ghost,
+                            agentNums,
+                            depth,
+                        ),
+                        action,
+                    )
+                    for action in gameState.getLegalActions(0)
+                ],
+            )
+
+        def visit_ghost(gameState, agentIndex, agentNums, depth):
+            """
+            => (score, action)
+            """
+            # print(f"[L#{depth}: visiting agent #{agentIndex}, agentNums: {agentNums}")
+            # Deepen the depth after each agent has responded
+            if agentIndex == agentNums:
+                return visit_pacman(gameState, agentNums, depth - 1)[0]
+
+            if gameState.isWin():
+                return self.evaluationFunction(gameState)
+
+            if gameState.isLose():
+                return self.evaluationFunction(gameState)
+
+            return mean(
+                [
+                    visit_ghost(
+                        gameState.generateSuccessor(agentIndex, action),
+                        agentIndex + 1,
+                        agentNums,
+                        depth,
+                    )
+                    for action in gameState.getLegalActions(agentIndex)
+                ]
+            )
+
+        score, action = visit_pacman(gameState, gameState.getNumAgents(), self.depth)
+
+        return action
 
 
 def betterEvaluationFunction(currentGameState: GameState):
