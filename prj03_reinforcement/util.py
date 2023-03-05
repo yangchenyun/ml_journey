@@ -379,6 +379,14 @@ class Counter(dict):
         for key in list(self.keys()):
             self[key] = self[key] / total
 
+    def multipleAll(self, multiplier):
+        """
+        Divides all counts by divisor
+        """
+        for key in self:
+            self[key] *= multiplier
+        return self
+
     def divideAll(self, divisor):
         """
         Divides all counts by divisor
@@ -386,6 +394,7 @@ class Counter(dict):
         divisor = float(divisor)
         for key in self:
             self[key] /= divisor
+        return self
 
     def copy(self):
         """
