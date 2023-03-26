@@ -360,9 +360,9 @@ class DiscreteDistribution(dict):
         >>> empty
         {}
         """
-        "*** YOUR CODE HERE ***"
-        raiseNotDefined()
-        "*** END YOUR CODE HERE ***"
+        s = self.total()
+        for k, v in self.items():
+            self[k] = v / s
 
     def sample(self):
         """
@@ -385,9 +385,18 @@ class DiscreteDistribution(dict):
         >>> round(samples.count('d') * 1.0/N, 1)
         0.0
         """
-        "*** YOUR CODE HERE ***"
-        raiseNotDefined()
-        "*** END YOUR CODE HERE ***"
+        # Built-in failed? Why?
+        # return random.choices(list(self.keys()), weights=list(self.values()))
+        prob = 0.0
+        acc_probs = {}
+        for k, v in self.items():
+            prob += v
+            acc_probs[k] = prob
+
+        p = random.random() * prob
+        for k, prob in acc_probs.items():
+            if prob > p:
+                return k
 
 
 class InferenceModule:
@@ -463,9 +472,18 @@ class InferenceModule:
         """
         Return the probability P(noisyDistance | pacmanPosition, ghostPosition).
         """
-        "*** YOUR CODE HERE ***"
-        raiseNotDefined()
-        "*** END YOUR CODE HERE ***"
+        if noisyDistance is None:
+            if ghostPosition == jailPosition:
+                return 1.0
+            else:
+                return 0.0
+
+        # NOTE: any noisyDistance is 0.0 at if ghost in jail
+        if ghostPosition == jailPosition:
+            return 0.0
+
+        trueDistance = manhattanDistance(pacmanPosition, ghostPosition)
+        return busters.getObservationProbability(noisyDistance, trueDistance)
 
     def setGhostPosition(self, gameState, ghostPosition, index):
         """
