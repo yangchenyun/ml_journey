@@ -626,9 +626,22 @@ class ExactInference(InferenceModule):
         Pacman's current position. However, this is not a problem, as Pacman's
         current position is known.
         """
-        "*** YOUR CODE HERE ***"
-        raiseNotDefined()
-        "*** END YOUR CODE HERE ***"
+        # Compute posterier: P(G_t+1) = P(G_t) * P(G_t+1|G_t)
+        prior = self.getBeliefDistribution().copy()
+        beliefs = DiscreteDistribution()
+
+        for oldPos, prior_p in prior.items():
+            # GetPositionDistribution already take consideration of jail time
+            for pos, p in self.getPositionDistribution(gameState, oldPos).items():
+                beliefs[pos] += prior_p * p
+
+        # Conditioned on given pacman position
+        pacPos = gameState.getPacmanPosition()
+        jailPos = self.getJailPosition()
+        beliefs[jailPos] += beliefs[pacPos]
+        beliefs[pacPos] = 0.0
+
+        self.beliefs = beliefs
 
     def getBeliefDistribution(self):
         return self.beliefs

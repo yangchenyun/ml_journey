@@ -263,7 +263,7 @@ class Factor(object):
                                "can't have repeated \n variables. Repeats:\n" +  str(repeatedVariables))
 
 
-        self.__variables = tuple(inputUnconditionedVariables) + tuple(inputConditionedVariables) # variables are unique string identifiersk
+        self.__variables = tuple(inputUnconditionedVariables) + tuple(inputConditionedVariables) # variables are unique string identifiers
         self.__variablesSet = set(self.__variables)
 
         if not self.__variablesSet.issubset(set(inputVariableDomainsDict.keys())): # it's okay for variableDomainsDict to have more items than needed
