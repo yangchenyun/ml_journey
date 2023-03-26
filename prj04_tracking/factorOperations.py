@@ -111,9 +111,9 @@ def joinFactors(factors: List[Factor]):
 
     # Construct the new factor
     setsOfconditioned = functools.reduce(
-        lambda x, y: x | y, setsOfconditioned)
+        lambda x, y: x | y, setsOfconditioned, set())
     setsOfUnconditioned = functools.reduce(
-        lambda x, y: x | y, setsOfUnconditioned)
+        lambda x, y: x | y, setsOfUnconditioned, set())
 
     # If a variable appears in the conditioned set, remove it from unconditioned set
     setsOfconditioned = setsOfconditioned - setsOfUnconditioned
