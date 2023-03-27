@@ -672,9 +672,9 @@ class ParticleFilter(InferenceModule):
         self.particles for the list of particles.
         """
         self.particles = []
-        "*** YOUR CODE HERE ***"
-        raiseNotDefined()
-        "*** END YOUR CODE HERE ***"
+        for i in range(self.numParticles):
+            pos = random.choice(self.legalPositions)
+            self.particles.append(pos)
 
     def getBeliefDistribution(self):
         """
@@ -684,9 +684,11 @@ class ParticleFilter(InferenceModule):
 
         This function should return a normalized distribution.
         """
-        "*** YOUR CODE HERE ***"
-        raiseNotDefined()
-        "*** END YOUR CODE HERE ***"
+        dist = DiscreteDistribution()
+        for p in self.particles:
+            dist[p] += 1
+        dist.normalize()
+        return dist
 
     ########### ########### ###########
     ########### QUESTION 10 ###########
@@ -704,9 +706,24 @@ class ParticleFilter(InferenceModule):
         be reinitialized by calling initializeUniformly. The total method of
         the DiscreteDistribution may be useful.
         """
-        "*** YOUR CODE HERE ***"
-        raiseNotDefined()
-        "*** END YOUR CODE HERE ***"
+        jailPos = self.getJailPosition()
+        pacPos = gameState.getPacmanPosition()
+
+        beliefs = self.getBeliefDistribution()
+        weighted_dist = DiscreteDistribution()
+        for p in self.particles:
+            # The prior distribution updated with conditioned observation
+            weighted_dist[p] = beliefs[p] * self.getObservationProb(
+                observation, pacPos, p, jailPos)
+        weighted_dist.normalize()
+
+        if weighted_dist.total() == 0:
+            self.initializeUniformly(gameState)
+            return
+
+        self.particles = []
+        for i in range(self.numParticles):
+            self.particles.append(weighted_dist.sample())
 
     ########### ########### ###########
     ########### QUESTION 11 ###########
@@ -717,9 +734,24 @@ class ParticleFilter(InferenceModule):
         Sample each particle's next state based on its current state and the
         gameState.
         """
-        "*** YOUR CODE HERE ***"
-        raiseNotDefined()
-        "*** END YOUR CODE HERE ***"
+        # Compute posterier: P(G_t+1) = P(G_t) * P(G_t+1|G_t)
+        prior = self.getBeliefDistribution().copy()
+        beliefs = DiscreteDistribution()
+
+        for oldPos, prior_p in prior.items():
+            # GetPositionDistribution already take consideration of jail time
+            for pos, p in self.getPositionDistribution(gameState, oldPos).items():
+                beliefs[pos] += prior_p * p
+
+        # Conditioned on given pacman position
+        pacPos = gameState.getPacmanPosition()
+        jailPos = self.getJailPosition()
+        beliefs[jailPos] += beliefs[pacPos]
+        beliefs[pacPos] = 0.0
+
+        self.particles = []
+        for i in range(self.numParticles):
+            self.particles.append(beliefs.sample())
 
 
 class JointParticleFilter(ParticleFilter):
