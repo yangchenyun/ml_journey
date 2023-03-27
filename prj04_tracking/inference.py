@@ -782,10 +782,14 @@ class JointParticleFilter(ParticleFilter):
         should be evenly distributed across positions in order to ensure a
         uniform prior.
         """
+        possible_positions = list(
+            itertools.product(self.legalPositions, repeat=3))
+        # NOTE: The order matters just in test
+        random.shuffle(possible_positions)
+
         self.particles = []
-        "*** YOUR CODE HERE ***"
-        raiseNotDefined()
-        "*** END YOUR CODE HERE ***"
+        for _ in range(self.numParticles):
+            self.particles.append(random.choice(possible_positions))
 
     def addGhostAgent(self, agent):
         """
@@ -819,9 +823,28 @@ class JointParticleFilter(ParticleFilter):
         be reinitialized by calling initializeUniformly. The total method of
         the DiscreteDistribution may be useful.
         """
-        "*** YOUR CODE HERE ***"
-        raiseNotDefined()
-        "*** END YOUR CODE HERE ***"
+        pacPos = gameState.getPacmanPosition()
+
+        beliefs = self.getBeliefDistribution()
+        weighted_dist = DiscreteDistribution()
+        for p in self.particles:
+            # p(O | gh_1, gh_2, ... gh_n, pacman)
+            # because observation
+            # p(O | gh_1) * p(O | gh_2) * ... * p(O | gh_n)
+            posterior_p = 1.0
+            for i in range(self.numGhosts):
+                posterior_p *= self.getObservationProb(
+                    observation[i], pacPos, p[i], self.getJailPosition(i))
+            weighted_dist[p] = beliefs[p] * posterior_p
+        weighted_dist.normalize()
+
+        if weighted_dist.total() == 0:
+            self.initializeUniformly(gameState)
+            return
+
+        self.particles = []
+        for i in range(self.numParticles):
+            self.particles.append(weighted_dist.sample())
 
     ########### ########### ###########
     ########### QUESTION 14 ###########
@@ -840,6 +863,7 @@ class JointParticleFilter(ParticleFilter):
             "*** YOUR CODE HERE ***"
             raiseNotDefined()
             """*** END YOUR CODE HERE ***"""
+
             newParticles.append(tuple(newParticle))
         self.particles = newParticles
 
