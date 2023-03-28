@@ -514,6 +514,7 @@ class InferenceModule:
             conf = game.Configuration(pos, game.Directions.STOP)
             gameState.data.agentStates[index +
                                        1] = game.AgentState(conf, False)
+
         return gameState
 
     def observe(self, gameState):
@@ -783,7 +784,7 @@ class JointParticleFilter(ParticleFilter):
         uniform prior.
         """
         possible_positions = list(
-            itertools.product(self.legalPositions, repeat=3))
+            itertools.product(self.legalPositions, repeat=self.numGhosts))
         # NOTE: The order matters just in test
         random.shuffle(possible_positions)
 
@@ -851,21 +852,73 @@ class JointParticleFilter(ParticleFilter):
     ########### ########### ###########
 
     def elapseTime(self, gameState):
+        pacPos = gameState.getPacmanPosition()
+        newParticles = []
+
+        for oldParticle in self.particles:
+            newParticle = list(oldParticle)  # A list of ghost positions
+            # now loop through and update each entry in newParticle...
+
+            for i in range(self.numGhosts):
+                beliefs = self.getPositionDistribution(
+                    gameState, oldParticle, i, self.ghostAgents[i])
+
+                # Update given pacman position
+                jailPos = self.getJailPosition(i)
+                beliefs[jailPos] += beliefs[pacPos]
+                beliefs[pacPos] = 0.0
+
+                # NOTE: directly sample the most likely ghost position
+                # This passed the test!
+                newParticle[i] = beliefs.sample()
+
+            newParticles.append(tuple(newParticle))
+        self.particles = newParticles
+
+    def _elapseTime(self, gameState):
         """
         Sample each particle's next state based on its current state and the
         gameState.
         """
-        newParticles = []
-        for oldParticle in self.particles:
-            newParticle = list(oldParticle)  # A list of ghost positions
+        prior = self.getBeliefDistribution()
+        # Distribution for each ghost's position
+        accumulated_beliefs = DiscreteDistribution()
+        pacPos = gameState.getPacmanPosition()
 
-            # now loop through and update each entry in newParticle...
-            "*** YOUR CODE HERE ***"
-            raiseNotDefined()
-            """*** END YOUR CODE HERE ***"""
+        for particle in self.particles:
+            assert len(particle) == self.numGhosts
+            prior_p = prior[particle]
+            # { pos => p}
+            ghosts_p = []
+            for i in range(self.numGhosts):
+                # NOTE: given the current ghosts, what's the next position distribution
+                beliefs = DiscreteDistribution({pos: p * prior_p for pos, p in
+                                                self.getPositionDistribution(
+                                                    gameState, particle, i, self.ghostAgents[i]).items()
+                                                })
 
-            newParticles.append(tuple(newParticle))
-        self.particles = newParticles
+                # Update given pacman position
+                jailPos = self.getJailPosition(i)
+                beliefs[jailPos] += beliefs[pacPos]
+                beliefs[pacPos] = 0.0
+                ghosts_p.append(beliefs)
+
+            for next_positions in list(
+                    itertools.product(*[set(dist.keys()) for dist in ghosts_p])):
+                # P(tuple[gh1 = pos1, gh2 = pos2, gh3 = pos3])
+                # equals
+                # P(gh1 = pos1) * P(gh2 = pos2) * P(gh2 = pos2)
+                p = 1.0
+                for i in range(self.numGhosts):
+                    p *= ghosts_p[i][next_positions[i]]
+                accumulated_beliefs[next_positions] = p
+
+        accumulated_beliefs.normalize()
+
+        # Resampling according to global distribution of possible actions
+        self.particles = []
+        for _ in range(self.numParticles):
+            self.particles.append(accumulated_beliefs.sample())
 
 
 # One JointInference module is shared globally across instances of MarginalInference
