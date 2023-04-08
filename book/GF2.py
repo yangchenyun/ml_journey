@@ -32,9 +32,16 @@ class One:
     __radd__ = __add__
     __rsub__ = __add__
     __rmul__ = __mul__
+
     # hack to ensure not (one < 1e-16) by ensuring not (one < x) for every x
     def __lt__(self, other):
         return False
+
+    def __gt__(self, other):
+        if other == 0 or other < EPISILON:
+            return True
+        else:
+            return False
 
     def __eq__(self, other):
         if isinstance(other, self.__class__) or other == 0:
