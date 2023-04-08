@@ -11,8 +11,8 @@
     matrix represent the boundary of the pixel region
     """
 
-import mat
-import png
+from book import mat
+from book import png
 import numbers
 import collections
 import webbrowser
