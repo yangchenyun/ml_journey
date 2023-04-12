@@ -62,7 +62,8 @@ def _gaussian_elimination(matrix, vector):
             vector[k] += c * vector[i]
 
     # Solve equation matrix[n-1][n-1]*x[n-1] = vector[n-1]
-    x = [0 for _ in range(n)]
+    # NOTE: padding with 0s for free variables
+    x = [0 for _ in range(max(m, n))]
 
     # NOTE: learning free degree variables as 0
     n = min(m, n)
