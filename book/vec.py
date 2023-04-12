@@ -1,4 +1,7 @@
 # Copyright 2013 Philip N. Klein
+import math
+
+epsilon = 1e-10
 
 
 def getitem(v, k):
@@ -74,7 +77,13 @@ def equal(u, v):
     False
     """
     assert u.D == v.D
-    return all(u[d] == v[d] for d in u.D)
+
+    def equal(a, b):
+        if type(a) == float or type(b) == float:
+            return math.isclose(a, b, rel_tol=epsilon, abs_tol=epsilon)
+        else:
+            return a == b
+    return all(equal(u[d], v[d]) for d in u.D)
 
 
 def add(u, v):
