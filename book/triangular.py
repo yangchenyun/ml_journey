@@ -1,6 +1,7 @@
 # Copyright 2013 Philip N. Klein
-from vec import Vec
-from vecutil import zero_vec
+from book.vec import Vec
+from book.vecutil import zero_vec
+
 
 def triangular_solve_n(rowlist, b):
     '''
@@ -27,6 +28,7 @@ def triangular_solve_n(rowlist, b):
     for j in reversed(range(n)):
         x[j] = (b[j] - rowlist[j] * x)/rowlist[j][j]
     return x
+
 
 def triangular_solve(rowlist, label_list, b):
     '''
