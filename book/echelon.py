@@ -1,7 +1,7 @@
 # Copyright 2013 Philip N. Klein
-from vec import Vec
-from mat import Mat
-import GF2
+from book.vec import Vec
+from book.mat import Mat
+from book import GF2
 
 def row_reduce(rowlist):
     """Given a list of vectors, transform the vectors.
