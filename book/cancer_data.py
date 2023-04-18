@@ -1,6 +1,6 @@
 # Copyright 2013 Philip N. Klein
-from vec import Vec
-from matutil import rowdict2mat
+from book.vec import Vec
+from book.matutil import rowdict2mat
 
 def read_training_data(fname, D=None):
     """Given a file in appropriate format, and given a set D of features,
