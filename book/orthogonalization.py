@@ -1,5 +1,5 @@
 # Copyright 2013 Philip N. Klein
-from vec import Vec
+from book.vec import Vec
 
 def project_along(b, v, eps = 1E-20):
     '''
