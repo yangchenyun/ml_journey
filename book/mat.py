@@ -277,6 +277,7 @@ class Mat:
             rows = sorted(M.D[0], key=repr)
         if cols == None:
             cols = sorted(M.D[1], key=repr)
+
         separator = ' | '
         numdec = 3
         pre = 1+max([len(str(r)) for r in rows])
@@ -298,7 +299,8 @@ class Mat:
             s4 += '{0:>{1}} {2}'.format(str(r), pre, separator)
             s4 += ''.join([format_col(c) for c in cols])
             s4 += '\n'
-        return '\n' + s1 + s2 + '\n' + s3 + '\n'
+
+        return '\n' + s1 + s2 + '\n' + s3 + '\n' + s4
 
     def pp(self, rows, cols):
         print(self.__str__(rows, cols))
