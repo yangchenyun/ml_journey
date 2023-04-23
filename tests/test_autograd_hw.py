@@ -290,11 +290,12 @@ def gradient_check(f, *args, tol=1e-6, backward=False, **kwargs):
         out = f(*args, **kwargs).sum()
         out.backward()
         computed_grads = [a.grad.numpy() for a in args]
-    error = sum(
-        np.linalg.norm(computed_grads[i] - numerical_grads[i])
+    errors = {
+        i: np.linalg.norm(computed_grads[i] - numerical_grads[i])
         for i in range(len(args))
-    )
-    assert error < tol
+    }
+    error = sum(errors.values())
+    assert error < tol, f"All errors: {errors}"
     return computed_grads
 
 
@@ -545,7 +546,7 @@ def submit_compute_gradient():
 ##############################################################################
 ### TESTS/SUBMISSION CODE FOR softmax_loss
 
-def test_softmax_loss_ndl():
+def test_log_forward_backward():
     # test forward pass for log
     np.testing.assert_allclose(ndl.log(ndl.Tensor([[4.  ],
        [4.55]])).numpy(), np.array([[1.38629436112 ],
@@ -554,6 +555,8 @@ def test_softmax_loss_ndl():
     # test backward pass for log
     gradient_check(ndl.log, ndl.Tensor(1 + np.random.rand(5,4)))
 
+def test_softmax_loss_forward():
+    # test softmax loss forward
     X,y = parse_mnist("data/train-images-idx3-ubyte.gz",
                       "data/train-labels-idx1-ubyte.gz")
     np.random.seed(0)
@@ -565,11 +568,12 @@ def test_softmax_loss_ndl():
     Z = ndl.Tensor(np.random.randn(y.shape[0], 10).astype(np.float32))
     np.testing.assert_allclose(softmax_loss(Z,y).numpy(), 2.7291998, rtol=1e-6, atol=1e-6)
 
+def test_softmax_loss_backward():
     # test softmax loss backward
     Zsmall = ndl.Tensor(np.random.randn(16, 10).astype(np.float32))
-    ysmall = ndl.Tensor(y_one_hot[:16])
-    gradient_check(softmax_loss, Zsmall, ysmall, tol=0.01, backward=True)
-
+    ysmall = np.zeros((16, 10))
+    ysmall[np.arange(16), np.random.randint(10, size=16)] = 1
+    gradient_check(softmax_loss, Zsmall, ndl.Tensor(ysmall), tol=0.01, backward=True)
 
 def submit_softmax_loss_ndl():
     # add a mugrade submit for log
