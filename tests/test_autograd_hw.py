@@ -601,6 +601,14 @@ def submit_softmax_loss_ndl():
 ##############################################################################
 ### TESTS/SUBMISSION CODE FOR nn_epoch
 
+def test_relu_forward_backward():
+    # test forward pass for relu
+    np.testing.assert_allclose(ndl.relu(ndl.Tensor([[10000], [4], [-1], [0]])).numpy(),
+                               np.array([[10000], [4], [0], [0]]))
+
+    # test backward pass for relu
+    gradient_check(ndl.relu, ndl.Tensor(np.random.randn(5,4)))
+
 def test_nn_epoch_ndl():
     # test forward/backward pass for relu
     np.testing.assert_allclose(ndl.relu(ndl.Tensor([[-46.9 , -48.8 , -45.45, -49.  ],

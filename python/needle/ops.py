@@ -327,19 +327,15 @@ class Exp(TensorOp):
 def exp(a):
     return Exp()(a)
 
-# TODO
 class ReLU(TensorOp):
     def compute(self, a):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        return array_api.maximum(a, 0)
 
     def gradient(self, out_grad, node):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
-
+        a = node.inputs[0]
+        # NOTE: Exception to look backward at input
+        mask = a.realize_cached_data() > 0
+        return (out_grad * mask,)
 
 def relu(a):
     return ReLU()(a)
-
