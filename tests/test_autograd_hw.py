@@ -545,6 +545,13 @@ def submit_compute_gradient():
 
 ##############################################################################
 ### TESTS/SUBMISSION CODE FOR softmax_loss
+def test_exp_forward_backward():
+    # test forward pass for exp
+    np.testing.assert_allclose(ndl.exp(ndl.Tensor([[4], [-1], [0]])).numpy(),
+                               np.exp(np.array([[4], [-1], [0]])))
+
+    # test backward pass for exp
+    gradient_check(ndl.exp, ndl.Tensor(np.random.randn(5,4)))
 
 def test_log_forward_backward():
     # test forward pass for log
