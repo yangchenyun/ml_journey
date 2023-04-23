@@ -101,6 +101,7 @@ class PowerScalar(TensorOp):
         return array_api.power(a, self.scalar)
 
     def gradient(self, out_grad, node):
+        a = node.inputs[0]
         return (out_grad * self.scalar * a**(self.scalar - 1),)
 
 def power_scalar(a, scalar):
@@ -230,7 +231,7 @@ class Summation(TensorOp):
         origin_shape = [1 if i in axes else a.shape[i]
                         for i, _ in enumerate(a.shape)]
 
-        print(f"outgrad: {out_grad.shape} -> origin {origin_shape} -> broadcast {a.shape}")
+        # print(f"[Summation] outgrad: {out_grad.shape} -> origin {origin_shape} -> broadcast {a.shape}")
 
         if size(origin_shape) == size(out_grad.shape):
             out_grad = out_grad.reshape(origin_shape)

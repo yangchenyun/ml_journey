@@ -609,7 +609,6 @@ def test_relu_forward_backward():
     # test backward pass for relu
     gradient_check(ndl.relu, ndl.Tensor(np.random.randn(5,4)))
 
-def test_nn_epoch_ndl():
     # test forward/backward pass for relu
     np.testing.assert_allclose(ndl.relu(ndl.Tensor([[-46.9 , -48.8 , -45.45, -49.  ],
        [-49.75, -48.75, -45.8 , -49.25],
@@ -618,6 +617,7 @@ def test_nn_epoch_ndl():
        [0., 0., 0., 0.]]))
     gradient_check(ndl.relu, ndl.Tensor(np.random.randn(5,4)))
 
+def test_nn_epoch_grad():
     # test nn gradients
     np.random.seed(0)
     X = np.random.randn(50,5).astype(np.float32)
@@ -639,6 +639,7 @@ def test_nn_epoch_ndl():
     np.testing.assert_allclose(dW1.reshape(5,10), W1_0-W1.numpy(), rtol=1e-4, atol=1e-4)
     np.testing.assert_allclose(dW2.reshape(10,3), W2_0-W2.numpy(), rtol=1e-4, atol=1e-4)
 
+def test_nn_epoch_e2e():
     # test full epoch
     X,y = parse_mnist("data/train-images-idx3-ubyte.gz",
                       "data/train-labels-idx1-ubyte.gz")

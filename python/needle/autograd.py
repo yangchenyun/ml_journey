@@ -384,6 +384,9 @@ class Tensor(Value):
     def log(self):
         return needle.ops.Log()(self)
 
+    def relu(self):
+        return needle.ops.ReLU()(self)
+
     __radd__ = __add__
     __rmul__ = __mul__
     __rsub__ = __sub__
