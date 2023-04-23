@@ -2,6 +2,7 @@
 import needle
 from typing import List, Optional, NamedTuple, Tuple, Union
 from collections import namedtuple
+from collections import defaultdict
 import numpy
 
 # needle version
@@ -317,7 +318,8 @@ class Tensor(Value):
         return "needle.Tensor(" + str(self.realize_cached_data()) + ")"
 
     def __str__(self):
-        return self.realize_cached_data().__str__()
+        # return self.realize_cached_data().__str__()
+        return f"T({self.op.__class__.__name__})"
 
     def numpy(self):
         data = self.realize_cached_data()
@@ -376,11 +378,33 @@ class Tensor(Value):
     def transpose(self, axes=None):
         return needle.ops.Transpose(axes)(self)
 
+    def exp(self):
+        return needle.ops.Exp()(self)
+
+    def log(self):
+        return needle.ops.Log()(self)
+
     __radd__ = __add__
     __rmul__ = __mul__
     __rsub__ = __sub__
     __rmatmul__ = __matmul__
 
+    def visualize(self):
+        G = nx.DiGraph()
+        visited = set()
+        queue = [self]
+        while queue:
+            node = queue.pop(0)
+            if node not in visited:
+                visited.add(node)
+                G.add_node(node)
+                for input_node in node.inputs:
+                    G.add_edge(input_node, node)
+                    queue.append(input_node)
+        nx.draw(G, with_labels=True)
+
+import networkx as nx
+from functools import reduce
 
 def compute_gradient_of_variables(output_tensor, out_grad):
     """Take gradient of output node with respect to each node in node_list.
@@ -388,7 +412,7 @@ def compute_gradient_of_variables(output_tensor, out_grad):
     Store the computed result in the grad field of each Variable.
     """
     # a map from node to a list of gradient contributions from each output node
-    node_to_output_grads_list: Dict[Tensor, List[Tensor]] = {}
+    node_to_output_grads_list: Dict[Tensor, List[Tensor]] = defaultdict(lambda: [])
     # Special note on initializing gradient of
     # We are really taking a derivative of the scalar reduce_sum(output_node)
     # instead of the vector output_node. But this is the common case for loss function.
@@ -397,9 +421,21 @@ def compute_gradient_of_variables(output_tensor, out_grad):
     # Traverse graph in reverse topological order given the output_node that we are taking gradient wrt.
     reverse_topo_order = list(reversed(find_topo_sort([output_tensor])))
 
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+    for node in reverse_topo_order:
+        grads_list = node_to_output_grads_list[node] 
+        assert grads_list, f"WARNING: no grads: {grads_list}"
+        assert all(grads_list[0].shape == g.shape for g in grads_list)
+
+        node.grad = reduce(lambda a, b: a + b, grads_list)
+
+        if node.op is None:  # leaf node
+            assert len(node.inputs) == 0, "Expect leaf node to have length 0"
+            continue 
+
+        input_grads = node.op.gradient_as_tuple(node.grad, node)
+
+        for x, dx in zip(node.inputs, input_grads):
+            node_to_output_grads_list[x].append(dx)
 
 
 def find_topo_sort(node_list: List[Value]) -> List[Value]:
@@ -410,16 +446,20 @@ def find_topo_sort(node_list: List[Value]) -> List[Value]:
     after all its predecessors are traversed due to post-order DFS, we get a topological
     sort.
     """
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
-
+    visited = set()
+    topo_order = []
+    for n in node_list:
+        topo_sort_dfs(n, visited, topo_order)
+    return topo_order
 
 def topo_sort_dfs(node, visited, topo_order):
     """Post-order DFS"""
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+    if node in visited:
+        return
+    visited.add(node)
+    for child in node.inputs:
+        topo_sort_dfs(child, visited, topo_order)
+    topo_order.append(node)
 
 
 ##############################
