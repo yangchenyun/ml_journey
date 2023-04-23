@@ -7,32 +7,6 @@ sys.path.append('python/')
 import needle as ndl
 
 
-def parse_mnist(image_filesname, label_filename):
-    """ Read an images and labels file in MNIST format.  See this page:
-    http://yann.lecun.com/exdb/mnist/ for a description of the file format.
-
-    Args:
-        image_filename (str): name of gzipped images file in MNIST format
-        label_filename (str): name of gzipped labels file in MNIST format
-
-    Returns:
-        Tuple (X,y):
-            X (numpy.ndarray[np.float32]): 2D numpy array containing the loaded
-                data.  The dimensionality of the data should be
-                (num_examples x input_dim) where 'input_dim' is the full
-                dimension of the data, e.g., since MNIST images are 28x28, it
-                will be 784.  Values should be of type np.float32, and the data
-                should be normalized to have a minimum value of 0.0 and a
-                maximum value of 1.0.
-
-            y (numpy.ndarray[dypte=np.int8]): 1D numpy array containing the
-                labels of the examples.  Values should be of type np.int8 and
-                for MNIST will contain the values 0-9.
-    """
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
-
 
 def softmax_loss(Z, y_one_hot):
     """ Return softmax loss.  Note that for the purposes of this assignment,
@@ -50,10 +24,11 @@ def softmax_loss(Z, y_one_hot):
     Returns:
         Average softmax loss over the sample. (ndl.Tensor[np.float32])
     """
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
-
+    batch_size = Z.shape[0]
+    Z_y = (Z * y_one_hot).sum(axes=1)
+    delta = Z.exp().sum(axes=1).log() - Z_y
+    # print(f"delta.shape: {delta.shape}, delta.sum: {type(delta.sum()/batch_size)}")
+    return delta.sum() / batch_size
 
 def nn_epoch(X, y, W1, W2, lr = 0.1, batch=100):
     """ Run a single epoch of SGD for a two-layer neural network defined by the
