@@ -1,4 +1,6 @@
 """Core data structures."""
+from functools import reduce
+
 import needle
 from typing import List, Optional, NamedTuple, Tuple, Union
 from collections import namedtuple
@@ -319,7 +321,7 @@ class Tensor(Value):
 
     def __str__(self):
         # return self.realize_cached_data().__str__()
-        return f"T({self.op.__class__.__name__})"
+        return f"{self.op.__class__.__name__}"
 
     def numpy(self):
         data = self.realize_cached_data()
@@ -391,23 +393,6 @@ class Tensor(Value):
     __rmul__ = __mul__
     __rsub__ = __sub__
     __rmatmul__ = __matmul__
-
-    def visualize(self):
-        G = nx.DiGraph()
-        visited = set()
-        queue = [self]
-        while queue:
-            node = queue.pop(0)
-            if node not in visited:
-                visited.add(node)
-                G.add_node(node)
-                for input_node in node.inputs:
-                    G.add_edge(input_node, node)
-                    queue.append(input_node)
-        nx.draw(G, with_labels=True)
-
-import networkx as nx
-from functools import reduce
 
 def compute_gradient_of_variables(output_tensor, out_grad):
     """Take gradient of output node with respect to each node in node_list.
