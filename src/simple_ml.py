@@ -17,11 +17,9 @@ def add(x, y):
         y (Python number or numpy array)
 
     Return:
-        Sum of x + y
+        # Sum of x + y
     """
-    ### BEGIN YOUR CODE
-    pass
-    ### END YOUR CODE
+    return x + y
 
 
 def parse_mnist(image_filename, label_filename):
@@ -47,9 +45,46 @@ def parse_mnist(image_filename, label_filename):
                 labels of the examples.  Values should be of type np.uint8 and
                 for MNIST will contain the values 0-9.
     """
-    ### BEGIN YOUR CODE
-    pass
-    ### END YOUR CODE
+    # Read from gzipped image and label file in MNIST format
+    gzip_images = gzip.open(image_filename, 'rb')
+    gzip_labels = gzip.open(label_filename, 'rb')
+
+    # File is in MSB (high endian) format, read in 4-byte integers
+    # The > character indicates that the byte order should be "big-endian", 
+    # which means that the most significant byte comes first. 
+    # The I character specifies that the value should be interpreted as an 
+    # unsigned integer.
+
+    read_32bit_int = lambda f: struct.unpack('>I', f.read(4))[0]
+    read_8bit_int = lambda f: struct.unpack('>B', f.read(1))[0]
+
+    magic_number = read_32bit_int(gzip_images)
+    if magic_number != 2051:
+        raise ValueError('Invalid magic number %d in MNIST image file: %s' %
+                         (magic_number, image_filename))
+    magic_number = read_32bit_int(gzip_labels)
+    if magic_number != 2049:
+        raise ValueError('Invalid magic number %d in MNIST label file: %s' %
+                         (magic_number, label_filename))
+    # Read number of images
+    num_images = read_32bit_int(gzip_images)
+    num_labels = read_32bit_int(gzip_labels)
+    if num_images != num_labels:
+        raise ValueError('Image file and label file contain different number of images')
+    # Read number of rows and columns
+    num_rows = read_32bit_int(gzip_images)
+    num_cols = read_32bit_int(gzip_images)
+    # Read images and labels
+    images = np.zeros((num_images, num_rows * num_cols), dtype=np.float32)
+    labels = np.zeros(num_images, dtype=np.uint8)
+    for i in range(num_images):
+        for j in range(num_rows * num_cols):
+            images[i, j] = read_8bit_int(gzip_images)
+        labels[i] = read_8bit_int(gzip_labels)
+    # Normalize images
+    images = images / 255.0
+    return images, labels
+
 
 
 def softmax_loss(Z, y):
@@ -67,9 +102,11 @@ def softmax_loss(Z, y):
     Returns:
         Average softmax loss over the sample.
     """
-    ### BEGIN YOUR CODE
-    pass
-    ### END YOUR CODE
+    # compute the softmax loss on the batch and take average
+    batch_size = Z.shape[0]
+    # Specifically, for each i from 0 to batch_size-1, 
+    # it selects the element at row i and column y[i] in Z.
+    return np.mean(-Z[np.arange(batch_size), y] + np.log(np.sum(np.exp(Z), axis=1)))
 
 
 def softmax_regression_epoch(X, y, theta, lr = 0.1, batch=100):
@@ -90,9 +127,24 @@ def softmax_regression_epoch(X, y, theta, lr = 0.1, batch=100):
     Returns:
         None
     """
-    ### BEGIN YOUR CODE
-    pass
-    ### END YOUR CODE
+    m = X.shape[0]
+    for i in range(0, m, batch):
+        B = np.arange(i, min(i + batch, m))
+        X_b = X[B, :] # (b, n)
+        y_b = y[B]    # (b, )
+
+        Z = np.exp(X_b @ theta)
+        Z = Z / Z.sum(axis=1, keepdims=True) # (b, k)
+
+        # create one-hot encoding for y_b
+        y_one_hot = np.zeros(Z.shape)  # (b, k)
+        y_one_hot[np.arange(Z.shape[0]), y_b] = 1
+
+        # compute gradient
+        grad = 1/len(B) * X_b.transpose() @ (Z - y_one_hot) # (n, k)
+
+        # update theta in place
+        theta -= lr * grad
 
 
 def nn_epoch(X, y, W1, W2, lr = 0.1, batch=100):
@@ -117,10 +169,31 @@ def nn_epoch(X, y, W1, W2, lr = 0.1, batch=100):
     Returns:
         None
     """
-    ### BEGIN YOUR CODE
-    pass
-    ### END YOUR CODE
+    relu = lambda x: np.maximum(x, 0)
+    m = X.shape[0]
+    for i in range(0, m, batch):
+        B = np.arange(i, min(i + batch, m))
+        X_b = X[B, :] # (b, n)
+        y_b = y[B]    # (b, )
 
+        Z_1 = relu(X_b @ W1) # (b, d)
+
+        G_2 = np.exp(Z_1 @ W2)   # (b, k)
+        G_2 /= G_2.sum(axis=1, keepdims=True) # (b, k)
+
+        y_one_hot = np.zeros(G_2.shape)  # (b, k)
+        y_one_hot[np.arange(G_2.shape[0]), y_b] = 1
+        G_2 -= y_one_hot
+
+        G_1 = np.where(Z_1 > 0, np.ones_like(Z_1), np.zeros_like((Z_1)))
+        G_1 *= G_2 @ W2.transpose() # (b, d)
+
+        # compute gradient
+        W1_grad = 1/len(B) * X_b.transpose() @ G_1 # (n, d)
+        W2_grad = 1/len(B) * Z_1.transpose() @ G_2 # (d, k)
+
+        W1 -= lr*W1_grad
+        W2 -= lr*W2_grad
 
 
 ### CODE BELOW IS FOR ILLUSTRATION, YOU DO NOT NEED TO EDIT
