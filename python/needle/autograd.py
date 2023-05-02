@@ -364,9 +364,10 @@ class Tensor(Value):
             return needle.ops.MulScalar(other)(self)
 
     def __pow__(self, other):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        if isinstance(other, Tensor):
+            raise NotImplementedError()
+        else:
+            return needle.ops.PowerScalar(other)(self)
 
     def __sub__(self, other):
         if isinstance(other, Tensor):
@@ -413,7 +414,7 @@ def compute_gradient_of_variables(output_tensor, out_grad):
     Store the computed result in the grad field of each Variable.
     """
     # a map from node to a list of gradient contributions from each output node
-    node_to_output_grads_list: Dict[Tensor, List[Tensor]] = {}
+    node_to_output_grads_list: Dict[Tensor, List[Tensor]] = defaultdict(lambda: [])
     # Special note on initializing gradient of
     # We are really taking a derivative of the scalar reduce_sum(output_node)
     # instead of the vector output_node. But this is the common case for loss function.
@@ -422,9 +423,21 @@ def compute_gradient_of_variables(output_tensor, out_grad):
     # Traverse graph in reverse topological order given the output_node that we are taking gradient wrt.
     reverse_topo_order = list(reversed(find_topo_sort([output_tensor])))
 
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+    for node in reverse_topo_order:
+        grads_list = node_to_output_grads_list[node] 
+        assert grads_list, f"WARNING: no grads: {grads_list}"
+        assert all(grads_list[0].shape == g.shape for g in grads_list)
+
+        node.grad = reduce(lambda a, b: a + b, grads_list)
+
+        if node.op is None:  # leaf node
+            assert len(node.inputs) == 0, "Expect leaf node to have length 0"
+            continue 
+
+        input_grads = node.op.gradient_as_tuple(node.grad, node)
+
+        for x, dx in zip(node.inputs, input_grads):
+            node_to_output_grads_list[x].append(dx)
 
 
 def find_topo_sort(node_list: List[Value]) -> List[Value]:
@@ -435,16 +448,20 @@ def find_topo_sort(node_list: List[Value]) -> List[Value]:
     after all its predecessors are traversed due to post-order DFS, we get a topological
     sort.
     """
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
-
+    visited = set()
+    topo_order = []
+    for n in node_list:
+        topo_sort_dfs(n, visited, topo_order)
+    return topo_order
 
 def topo_sort_dfs(node, visited, topo_order):
     """Post-order DFS"""
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+    if node in visited:
+        return
+    visited.add(node)
+    for child in node.inputs:
+        topo_sort_dfs(child, visited, topo_order)
+    topo_order.append(node)
 
 
 ##############################
