@@ -551,7 +551,7 @@ def pythag(a,b):
 ##                   END OF TERMS AND CONDITIONS
 ##
 
-from mat import Mat
+from book.mat import Mat
 
 def _listlist2mat(L, rows, cols):
     """L is a matrix represented as a list of lists representing rows.

@@ -1,4 +1,4 @@
-from image import color2gray, file2image
+from book.image import color2gray, file2image
 import os
    
 def load_images(path, n = 20):
@@ -12,7 +12,7 @@ def load_images(path, n = 20):
     '''
     return {i:color2gray(file2image(os.path.join(path,"img%02d.png" % i))) for i in range(n)}
 
-from mat import *
+from book.mat import *
 from math import sqrt
 M_f = {(0,0):1/sqrt(2) , (1,0):1/sqrt(2) , (0,1):1/sqrt(3), (1,1):-1/sqrt(3), (2,1):1/sqrt(3)}
 test_M = Mat(({0,1,2},{0,1}), M_f)
