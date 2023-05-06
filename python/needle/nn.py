@@ -141,37 +141,39 @@ class BatchNorm1d(Module):
 
         if self.training:
             # NOTE: Calculate stats over the batch dimension now
-            x_mean = (x.sum(axes=(0,)) / b)
-            self.running_mean = self.running_mean * (1 - self.momentum) + x_mean.detach() * self.momentum
-            x_mean = x_mean.reshape((1, n)).broadcast_to(x.shape)
+            batch_mean = (x.sum(axes=(0,)) / x.shape[0])
+            batch_var = (((x - batch_mean.broadcast_to(x.shape)) ** 2).sum(axes=(0,)) / x.shape[0])  # biased variance
+            self.running_mean = self.running_mean * (1 - self.momentum) + batch_mean.detach() * self.momentum
+            self.running_var = self.running_var * (1 - self.momentum) + batch_var.detach() * self.momentum
 
-            x_var = (((x - x_mean) ** 2).sum(axes=(0,)) / b)
-            self.running_var = self.running_var * (1 - self.momentum) + x_var.detach() * self.momentum
-            x_var = x_var.reshape((1, n)).broadcast_to(x.shape)
-            normalized = (x - x_mean) / (x_var + self.eps)**0.5
+            batch_mean = batch_mean.broadcast_to(x.shape)
+
+            batch_var = batch_var.broadcast_to(x.shape)
+            normalized = (x - batch_mean) / (batch_var + self.eps)**0.5
         else:
             normalized = (x - self.running_mean) / (self.running_var + self.eps)**0.5
             
-        return normalized * self.weight + self.bias
-
+        # TODO: Why weights.broadcast_to here would make a difference?
+        return normalized * self.weight.broadcast_to(x.shape) + self.bias.broadcast_to(x.shape)
 
 class LayerNorm1d(Module):
     def __init__(self, dim, eps=1e-5, device=None, dtype="float32"):
         super().__init__()
         self.dim = dim
         self.eps = eps
-        self.weight = Parameter(init.ones(dim, device=device, dtype=dtype))
-        self.bias = Parameter(init.zeros(dim, device=device, dtype=dtype))
+        self.weight = Parameter(init.ones(dim, device=device, dtype=dtype, requires_grad=True))
+        self.bias = Parameter(init.zeros(dim, device=device, dtype=dtype, requires_grad=True))
 
     def forward(self, x: Tensor) -> Tensor:
         b = x.shape[0]
         n = x.shape[1]
+
         # NOTE: Calculate stats over the feature dimension
         # NOTE: Would fail if not broadcasting, the grad shape won't agree
-        x_mean = (x.sum(axes=(1,)) / n).reshape((b, 1)).broadcast_to(x.shape)
-        x_var = (((x - x_mean) ** 2).sum(axes=(1,)) / n).reshape((b, 1)).broadcast_to(x.shape)
-        normalized = (x - x_mean) / (x_var + self.eps)**0.5
-        return normalized * self.weight + self.bias
+        layer_mean = (x.sum(axes=(1,)) / n).reshape((b, 1)).broadcast_to(x.shape)
+        layer_var = (((x - layer_mean) ** 2).sum(axes=(1,)) / n).reshape((b, 1)).broadcast_to(x.shape)
+        normalized = (x - layer_mean) / (layer_var + self.eps)**0.5
+        return normalized * self.weight.broadcast_to(x.shape) + self.bias.broadcast_to(x.shape)
 
 class Dropout(Module):
     def __init__(self, p = 0.5):
