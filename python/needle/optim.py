@@ -1,6 +1,7 @@
 """Optimization module"""
 import needle as ndl
 import numpy as np
+from collections import defaultdict
 
 
 class Optimizer:
@@ -20,13 +21,22 @@ class SGD(Optimizer):
         super().__init__(params)
         self.lr = lr
         self.momentum = momentum
-        self.u = {}
+        self.u = defaultdict(lambda: 0)
         self.weight_decay = weight_decay
+        self.t = 0
 
     def step(self):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        u = self.u
+        for p in self.params:
+            if p.grad:
+                grad = p.grad.numpy().astype(p.data.dtype)
+                # Weight decay, penalize according to weight values
+                if self.weight_decay > 0:
+                    grad += self.weight_decay * p.numpy()
+                u[p] = u[p] * self.momentum + (1 - self.momentum) * grad
+                p.data -= (self.lr * u[p])
+
+        self.t += 1
 
 
 class Adam(Optimizer):
@@ -47,10 +57,22 @@ class Adam(Optimizer):
         self.weight_decay = weight_decay
         self.t = 0
 
-        self.m = {}
-        self.v = {}
+        self.m = defaultdict(lambda: 0)
+        self.v = defaultdict(lambda: 0)
 
     def step(self):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        self.t += 1
+        m = self.m
+        v = self.v
+
+        for p in self.params:
+            if p.grad:
+                grad = p.grad.data
+                if self.weight_decay > 0:
+                    grad += self.weight_decay * p.data
+                m[p] = m[p] * self.beta1 + (1 - self.beta1) * grad
+                v[p] = v[p] * self.beta2 + (1 - self.beta2) * (grad**2)
+                m_corr = m[p] / (1 - self.beta1**self.t) # bias correction
+                v_corr = v[p] / (1 - self.beta2**self.t)
+                delta = ndl.Tensor(self.lr * (m_corr/(v_corr**0.5 + self.eps)), dtype=p.data.dtype)
+                p.data -= delta
