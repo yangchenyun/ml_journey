@@ -88,10 +88,9 @@ class Linear(Module):
         self.in_features = in_features
         self.out_features = out_features
 
-        self.weight = init.kaiming_uniform(self.in_features, self.out_features)
-
+        self.weight = Parameter(init.kaiming_uniform(self.in_features, self.out_features))
         # NOTE: usually bias could be initialized as zero
-        self.bias = init.kaiming_uniform(self.out_features, 1).transpose() if bias else None
+        self.bias = Parameter(init.kaiming_uniform(self.out_features, 1).transpose() if bias else None)
 
     def forward(self, X: Tensor) -> Tensor:
         out = X @ self.weight
@@ -101,10 +100,7 @@ class Linear(Module):
 
 class Flatten(Module):
     def forward(self, X):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
-
+        return X.reshape((X.shape[0], -1))
 
 class ReLU(Module):
     def forward(self, x: Tensor) -> Tensor:
@@ -133,15 +129,30 @@ class BatchNorm1d(Module):
         self.dim = dim
         self.eps = eps
         self.momentum = momentum
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
 
+        self.weight = Parameter(init.ones(dim, device=device, dtype=dtype))
+        self.bias = Parameter(init.zeros(dim, device=device, dtype=dtype))
+        self.running_mean = init.zeros(dim, device=device, dtype=dtype)
+        self.running_var = init.ones(dim, device=device, dtype=dtype)
 
     def forward(self, x: Tensor) -> Tensor:
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        b = x.shape[0]
+        n = x.shape[1]
+
+        if self.training:
+            # NOTE: Calculate stats over the batch dimension now
+            x_mean = (x.sum(axes=(0,)) / b)
+            self.running_mean = self.running_mean * (1 - self.momentum) + x_mean * self.momentum
+            x_mean = x_mean.reshape((1, n)).broadcast_to(x.shape)
+
+            x_var = (((x - x_mean) ** 2).sum(axes=(0,)) / b)
+            self.running_var = self.running_var * (1 - self.momentum) + x_var * self.momentum
+            x_var = x_var.reshape((1, n)).broadcast_to(x.shape)
+            normalized = (x - x_mean) / (x_var + self.eps)**0.5
+        else:
+            normalized = (x - self.running_mean) / (self.running_var + self.eps)**0.5
+            
+        return normalized * self.weight + self.bias
 
 
 class LayerNorm1d(Module):
@@ -149,15 +160,18 @@ class LayerNorm1d(Module):
         super().__init__()
         self.dim = dim
         self.eps = eps
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        self.weight = Parameter(init.ones(dim, device=device, dtype=dtype))
+        self.bias = Parameter(init.zeros(dim, device=device, dtype=dtype))
 
     def forward(self, x: Tensor) -> Tensor:
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
-
+        b = x.shape[0]
+        n = x.shape[1]
+        # NOTE: Calculate stats over the feature dimension
+        # NOTE: Would fail if not broadcasting, the grad shape won't agree
+        x_mean = (x.sum(axes=(1,)) / n).reshape((b, 1)).broadcast_to(x.shape)
+        x_var = (((x - x_mean) ** 2).sum(axes=(1,)) / n).reshape((b, 1)).broadcast_to(x.shape)
+        normalized = (x - x_mean) / (x_var + self.eps)**0.5
+        return normalized * self.weight + self.bias
 
 class Dropout(Module):
     def __init__(self, p = 0.5):
@@ -165,9 +179,11 @@ class Dropout(Module):
         self.p = p
 
     def forward(self, x: Tensor) -> Tensor:
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        if self.training:
+            drop = init.randb(*x.shape, p=self.p)
+            return drop * x / (1 - self.p)
+        else:
+            return x
 
 
 class Residual(Module):
@@ -176,9 +192,4 @@ class Residual(Module):
         self.fn = fn
 
     def forward(self, x: Tensor) -> Tensor:
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
-
-
-
+        return x + self.fn(x)
