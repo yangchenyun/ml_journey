@@ -4,6 +4,8 @@ from typing import List, Optional, NamedTuple, Tuple, Union
 from collections import namedtuple
 import numpy
 from needle import init
+from collections import defaultdict
+from functools import reduce
 
 # needle version
 LAZY_MODE = False
@@ -401,6 +403,12 @@ class Tensor(Value):
 
     def transpose(self, axes=None):
         return needle.ops.Transpose(axes)(self)
+
+    def relu(self):
+        return needle.ops.ReLU()(self)
+
+    def exp(self):
+        return needle.ops.Exp()(self)
 
     __radd__ = __add__
     __rmul__ = __mul__

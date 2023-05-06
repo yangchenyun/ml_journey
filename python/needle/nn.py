@@ -5,6 +5,7 @@ from needle.autograd import Tensor
 from needle import ops
 import needle.init as init
 import numpy as np
+from functools import reduce
 
 
 class Parameter(Tensor):
@@ -87,16 +88,16 @@ class Linear(Module):
         self.in_features = in_features
         self.out_features = out_features
 
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        self.weight = init.kaiming_uniform(self.in_features, self.out_features)
+
+        # NOTE: usually bias could be initialized as zero
+        self.bias = init.kaiming_uniform(self.out_features, 1).transpose() if bias else None
 
     def forward(self, X: Tensor) -> Tensor:
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
-
-
+        out = X @ self.weight
+        # NOTE: Apply bias for every output vector
+        out = out + self.bias.broadcast_to(out.shape) if self.bias else out
+        return out
 
 class Flatten(Module):
     def forward(self, X):
@@ -107,10 +108,7 @@ class Flatten(Module):
 
 class ReLU(Module):
     def forward(self, x: Tensor) -> Tensor:
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
-
+        return x.relu()
 
 class Sequential(Module):
     def __init__(self, *modules):
@@ -118,10 +116,7 @@ class Sequential(Module):
         self.modules = modules
 
     def forward(self, x: Tensor) -> Tensor:
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
-
+        return reduce(lambda acc, m: m.forward(acc), self.modules, x)
 
 class SoftmaxLoss(Module):
     def forward(self, logits: Tensor, y: Tensor):

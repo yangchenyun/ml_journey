@@ -7,6 +7,7 @@ from .autograd import Op, Tensor, Value, TensorOp
 from .autograd import TensorTuple, TensorTupleOp
 import numpy
 import functools
+import needle
 
 # NOTE: we will numpy as the array_api
 # to backup our computations, this line will change in later homeworks
@@ -395,16 +396,45 @@ class LogSumExp(TensorOp):
     def __init__(self, axes: Optional[tuple] = None):
         self.axes = axes
 
+    def restore_shape(self, Z: Tensor):
+        # Reshape the maxZ to match Z shape
+        # The dimension which is summed out would be 1, rest unchanged.
+        new_shape = [1] * len(Z.shape)
+        for i in range(len(new_shape)):
+            if self.axes and i not in self.axes:
+                new_shape[i] = Z.shape[i]
+        return tuple(new_shape)
+
+
     def compute(self, Z):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        maxZ = array_api.amax(Z, axis=self.axes)
+        new_shape = self.restore_shape(Z)
+        return array_api.log(
+            array_api.sum(
+                array_api.exp(Z - maxZ.reshape(new_shape)),
+                axis=self.axes)) + maxZ
 
     def gradient(self, out_grad, node):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        """
+        f(a) = a - max(a)
+        g(x) = log(sum(exp(x)))
 
+        df/da = [1, 1, ... 0, ... 1]
+        dg/dx = exp(x) / sum(exp(x))
+
+        Q: why the df/da is not used here?
+        """
+        input = node.inputs[0].realize_cached_data()
+
+        max_in = array_api.amax(input, axis=self.axes)
+        input_exp = array_api.exp(input - max_in.reshape(self.restore_shape(input)))
+
+        input_exp_sum = array_api.sum(input_exp, axis=self.axes)
+        gradient = input_exp / input_exp_sum.reshape(self.restore_shape(input))
+
+        # NOTE: out_grad also has dimension reduced, here restore it
+        # for broadcasting to work properly
+        return out_grad.reshape(self.restore_shape(input)) * needle.Tensor(gradient)
 
 def logsumexp(a, axes=None):
     return LogSumExp(axes=axes)(a)
