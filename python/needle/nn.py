@@ -120,11 +120,12 @@ class Sequential(Module):
 
 class SoftmaxLoss(Module):
     def forward(self, logits: Tensor, y: Tensor):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
-
-
+        b = logits.shape[0]
+        axis = len(logits.shape) - 1 # last dimension as data
+        n = logits.shape[axis]
+        H_y = logits * init.one_hot(n, y)  # pluck out the encoding label == y
+        delta = logits.logsumexp(axes=(axis,)) - H_y.sum(axes=(axis,))
+        return delta.sum() / b
 
 class BatchNorm1d(Module):
     def __init__(self, dim, eps=1e-5, momentum=0.1, device=None, dtype="float32"):

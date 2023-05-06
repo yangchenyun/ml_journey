@@ -410,6 +410,9 @@ class Tensor(Value):
     def exp(self):
         return needle.ops.Exp()(self)
 
+    def logsumexp(self, axes=None):
+        return needle.ops.LogSumExp(axes)(self)
+
     __radd__ = __add__
     __rmul__ = __mul__
     __rsub__ = __sub__
