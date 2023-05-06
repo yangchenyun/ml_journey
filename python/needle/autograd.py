@@ -437,7 +437,8 @@ def compute_gradient_of_variables(output_tensor, out_grad):
     for node in reverse_topo_order:
         grads_list = node_to_output_grads_list[node] 
         assert grads_list, f"WARNING: no grads: {grads_list}"
-        assert all(grads_list[0].shape == g.shape for g in grads_list)
+        for g in grads_list:
+            assert grads_list[0].shape == g.shape, f"WARNING: shape mismatch: {grads_list[0]} {grads_list[0].shape} != {g.shape}"
 
         node.grad = reduce(lambda a, b: a + b, grads_list)
 
