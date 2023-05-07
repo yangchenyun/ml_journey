@@ -88,9 +88,9 @@ class Linear(Module):
         self.in_features = in_features
         self.out_features = out_features
 
-        self.weight = Parameter(init.kaiming_uniform(self.in_features, self.out_features))
+        self.weight = Parameter(init.kaiming_uniform(self.in_features, self.out_features, requires_grad=True, device=device, dtype=dtype))
         # NOTE: usually bias could be initialized as zero
-        self.bias = Parameter(init.kaiming_uniform(self.out_features, 1).transpose() if bias else None)
+        self.bias = Parameter(init.kaiming_uniform(self.out_features, 1, requires_grad=True, device=device, dtype=dtype).transpose() if bias else None)
 
     def forward(self, X: Tensor) -> Tensor:
         out = X @ self.weight
