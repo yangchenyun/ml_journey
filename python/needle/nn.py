@@ -153,8 +153,16 @@ class BatchNorm1d(Module):
         else:
             normalized = (x - self.running_mean) / (self.running_var + self.eps)**0.5
             
-        # TODO: Why weights.broadcast_to here would make a difference?
-        return normalized * self.weight.broadcast_to(x.shape) + self.bias.broadcast_to(x.shape)
+        broadcasted_result = normalized * self.weight.broadcast_to(x.shape) + self.bias.broadcast_to(x.shape)
+        result = normalized * self.weight + self.bias
+
+        assert np.all(broadcasted_result.numpy() == result.numpy()), "Broadcasting should not change the result"
+
+        # TODO: Why not use weights.broadcast_to would make numeric difference in Adam?
+        # Because gradient propagation for self.weight and self.bias?
+        # import pdb; pdb.set_trace()
+        # return result
+        return broadcasted_result
 
 class LayerNorm1d(Module):
     def __init__(self, dim, eps=1e-5, device=None, dtype="float32"):
@@ -173,7 +181,12 @@ class LayerNorm1d(Module):
         layer_mean = (x.sum(axes=(1,)) / n).reshape((b, 1)).broadcast_to(x.shape)
         layer_var = (((x - layer_mean) ** 2).sum(axes=(1,)) / n).reshape((b, 1)).broadcast_to(x.shape)
         normalized = (x - layer_mean) / (layer_var + self.eps)**0.5
-        return normalized * self.weight.broadcast_to(x.shape) + self.bias.broadcast_to(x.shape)
+
+        broadcasted_result = normalized * self.weight.broadcast_to(x.shape) + self.bias.broadcast_to(x.shape)
+        result = normalized * self.weight + self.bias
+
+        assert np.all(broadcasted_result.numpy() == result.numpy()), "Broadcasting should not change the result"
+        return broadcasted_result
 
 class Dropout(Module):
     def __init__(self, p = 0.5):
