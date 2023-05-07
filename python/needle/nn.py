@@ -130,8 +130,8 @@ class BatchNorm1d(Module):
         self.eps = eps
         self.momentum = momentum
 
-        self.weight = Parameter(init.ones(dim, device=device, dtype=dtype))
-        self.bias = Parameter(init.zeros(dim, device=device, dtype=dtype))
+        self.weight = Parameter(init.ones(dim, device=device, dtype=dtype, requires_grad=True))
+        self.bias = Parameter(init.zeros(dim, device=device, dtype=dtype, requires_grad=True))
         self.running_mean = init.zeros(dim, device=device, dtype=dtype)
         self.running_var = init.ones(dim, device=device, dtype=dtype)
 
