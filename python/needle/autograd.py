@@ -422,11 +422,12 @@ class Tensor(Value):
         else:
             raise NotImplementedError()
 
-    def __eq__(self, other):
-        if isinstance(other, Tensor):
-            return needle.ops.EWiseEq()(self, other)
-        else:
-            raise NotImplementedError()
+    # TODO: Causing hashing issues in dictionary
+    # def __eq__(self, other):
+    #     if isinstance(other, Tensor):
+    #         return needle.ops.EWiseEq()(self, other)
+    #     else:
+    #         return super().__eq__(other)
 
     __radd__ = __add__
     __rmul__ = __mul__
