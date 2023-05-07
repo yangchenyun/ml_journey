@@ -2,7 +2,6 @@ import struct
 import gzip
 import numpy as np
 from .autograd import Tensor
-import needle as ndl
 
 from typing import Iterator, Optional, List, Sized, Union, Iterable, Any
 
@@ -98,7 +97,7 @@ class DataLoader:
         dataset: Dataset,
         batch_size: Optional[int] = 1,
         shuffle: bool = False,
-    ) -> ndl.Tensor :
+    ) -> Tensor :
 
         self.dataset = dataset
         self.shuffle = shuffle
@@ -120,13 +119,13 @@ class DataLoader:
         assert self.batch_ordering is not None
         return self
 
-    def __next__(self) -> List[ndl.Tensor]:
+    def __next__(self) -> List[Tensor]:
         if self.batch_index == len(self.batch_ordering):
             raise StopIteration
 
         batch_indices = self.batch_ordering[self.batch_index]
         # NOTE: It expects a tensor as returned type
-        batch_data = [ndl.Tensor(batch, requires_grad=False) for batch in self.get_batch(batch_indices)]
+        batch_data = [Tensor(batch, requires_grad=False) for batch in self.get_batch(batch_indices)]
         self.batch_index += 1
         return batch_data
 
