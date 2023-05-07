@@ -48,7 +48,11 @@ def epoch(dataloader, model, opt=None):
     - Use an optimizer to run backward path and update all the parameters
     """
     np.random.seed(4)
-    model.training = True if opt is not None else False
+    if opt is not None:
+        model.train()
+    else:
+        model.eval()
+
     running_loss = 0.0
     running_error_count = 0
     running_N = 0
