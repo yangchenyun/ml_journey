@@ -413,6 +413,21 @@ class Tensor(Value):
     def logsumexp(self, axes=None):
         return needle.ops.LogSumExp(axes)(self)
 
+    def argmax(self, axis=None):
+        return needle.ops.ArgMax(axis)(self)
+
+    def __ne__(self, other):
+        if isinstance(other, Tensor):
+            return needle.ops.EWiseNe()(self, other)
+        else:
+            raise NotImplementedError()
+
+    def __eq__(self, other):
+        if isinstance(other, Tensor):
+            return needle.ops.EWiseEq()(self, other)
+        else:
+            raise NotImplementedError()
+
     __radd__ = __add__
     __rmul__ = __mul__
     __rsub__ = __sub__

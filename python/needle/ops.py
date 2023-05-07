@@ -125,6 +125,20 @@ class EWiseMul(TensorOp):
 def multiply(a, b):
     return EWiseMul()(a, b)
 
+class EWiseNe(TensorOp):
+    def compute(self, a: NDArray, b: NDArray):
+        return a != b
+
+    def gradient(self, out_grad, node):
+        raise NotImplementedError("Gradient for EWiseEq not implemented yet.")
+
+class EWiseEq(TensorOp):
+    def compute(self, a: NDArray, b: NDArray):
+        return a == b
+
+    def gradient(self, out_grad, node):
+        raise NotImplementedError("Gradient for EWiseEq not implemented yet.")
+
 
 class MulScalar(TensorOp):
     def __init__(self, scalar):
