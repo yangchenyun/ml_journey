@@ -195,8 +195,10 @@ class Dropout(Module):
 
     def forward(self, x: Tensor) -> Tensor:
         if self.training:
-            drop = init.randb(*x.shape, p=self.p)
-            return drop * x / (1 - self.p)
+            # NOTE: another tricky implementation details
+            # The probability here is the probability of keeping the value
+            keep = init.randb(*x.shape, p=1-self.p)
+            return keep * x / (1 - self.p)
         else:
             return x
 
