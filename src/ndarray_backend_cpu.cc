@@ -5,6 +5,7 @@
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
+#include <limits.h>
 
 namespace needle {
 namespace cpu {
@@ -340,9 +341,16 @@ void ReduceMax(const AlignedArray& a, AlignedArray* out, size_t reduce_size) {
    *   out: compact array to write into
    *   reduce_size: size of the dimension to reduce over
    */
-
   /// BEGIN YOUR SOLUTION
-  
+  scalar_t max = INT_MIN;
+  size_t out_i = 0;
+  for (size_t i = 0; i < a.size; i++) {
+    max = std::max(max, a.ptr[i]);
+    if (i % reduce_size == reduce_size - 1) {
+      out->ptr[out_i++] = max;
+      max = INT_MIN;
+    }
+  }
   /// END YOUR SOLUTION
 }
 
@@ -357,7 +365,15 @@ void ReduceSum(const AlignedArray& a, AlignedArray* out, size_t reduce_size) {
    */
 
   /// BEGIN YOUR SOLUTION
-  
+  scalar_t sum = 0;
+  size_t out_i = 0;
+  for (size_t i = 0; i < a.size; i++) {
+    sum += a.ptr[i];
+    if (i % reduce_size == reduce_size - 1) {
+      out->ptr[out_i++] = sum;
+      sum = 0;
+    }
+  }
   /// END YOUR SOLUTION
 }
 
