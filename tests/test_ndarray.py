@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-import mugrade
 import needle as ndl
 from needle import backend_ndarray as nd
 
@@ -252,6 +251,19 @@ def test_reshape(device, params):
 
 
 getitem_params = [
+    {"shape": (8, 16), "fn": lambda X: X[:, :]},
+    {"shape": (8, 16), "fn": lambda X: X[1:, :]},
+    {"shape": (8, 16), "fn": lambda X: X[:1, :]},
+    {"shape": (8, 16), "fn": lambda X: X[::1, :]},
+    {"shape": (8, 16), "fn": lambda X: X[::2, :]},  # step
+    {"shape": (8, 16), "fn": lambda X: X[-2:, :]},  # strange error when start is -5, the dimension is 8
+    {"shape": (8, 16), "fn": lambda X: X[:-2, :]},
+    {"shape": (8, 16), "fn": lambda X: X[:, 1:]},
+    {"shape": (8, 16), "fn": lambda X: X[:, :1]},
+    {"shape": (8, 16), "fn": lambda X: X[:, ::1]},
+    {"shape": (8, 16), "fn": lambda X: X[:, -2:]},
+    {"shape": (8, 16), "fn": lambda X: X[:, :-2]},
+    {"shape": (8, 16), "fn": lambda X: X[:, ::2]},
     {"shape": (8, 16), "fn": lambda X: X[3:4, 3:4]},
     {"shape": (8, 16), "fn": lambda X: X[1:2, 1:3]},
     {"shape": (8, 16), "fn": lambda X: X[3:4, 1:4]},
@@ -376,6 +388,7 @@ def test_ewise_tanh(device):
     np.testing.assert_allclose(np.tanh(A), (B.tanh()).numpy(), atol=1e-5, rtol=1e-5)
 
 
+# import mugrade
 ######################    |    ######################
 ###################### MUGRADE ######################
 ######################    v    ######################
