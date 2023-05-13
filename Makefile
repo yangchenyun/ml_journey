@@ -2,6 +2,10 @@
 
 all: lib
 
+debug_lib:
+	@mkdir -p build
+	@cd build; cmake -DCMAKE_BUILD_TYPE=Debug ..
+	@cd build; $(MAKE)
 
 lib:
 	@mkdir -p build
