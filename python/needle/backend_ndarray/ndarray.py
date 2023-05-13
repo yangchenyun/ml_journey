@@ -518,7 +518,7 @@ class NDArray:
             self.device.matmul_tiled(a._handle, b._handle, out._handle, m, n, p)
 
             return (
-                out.permute((0, 2, 1, 3))
+                out.permute((0, 2, 1, 3))  # NOTE: convert back to non-tiled view
                 .compact()
                 .reshape((self.shape[0], other.shape[1]))
             )

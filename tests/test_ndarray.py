@@ -299,16 +299,24 @@ def test_broadcast_to(device, params):
     check_same_memory(A, rhs)
 
 
-matmul_dims = [(16, 16, 16), 
-    (8, 8, 8), 
+matmul_dims = [
+    # naive version
+    (1, 1, 1), 
     (1, 2, 3), 
     (3, 4, 5), 
     (5, 4, 3), 
-    (64, 64, 64), 
-    (72, 72, 72), 
+    (9, 9, 9), 
+    (4, 4, 4), 
     (72, 73, 74), 
     (74, 73, 72), 
-    (128, 128, 128)]
+    # tiled version
+    (8, 8, 8), 
+    (16, 16, 16), 
+    (24, 24, 24), 
+    (64, 64, 64),
+    (72, 72, 72), 
+    (128, 128, 128),
+    ]
 @pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
 @pytest.mark.parametrize("m,n,p", matmul_dims)
 def test_matmul(m, n, p, device):
