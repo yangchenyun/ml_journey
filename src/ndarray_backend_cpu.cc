@@ -9,6 +9,8 @@
 namespace needle {
 namespace cpu {
 
+#define DEBUG 1
+
 #define ALIGNMENT 256
 #define TILE 8
 typedef float scalar_t;
@@ -44,6 +46,43 @@ void Fill(AlignedArray* out, scalar_t val) {
 }
 
 
+void ViewIteratorHelper(std::vector<uint32_t> shape,
+             std::vector<uint32_t> strides, size_t offset, size_t d, size_t* cnt, 
+             std::function<void(size_t, size_t)> process_index) {
+  if (d == shape.size())  {
+    return;
+  }
+  if (d == shape.size() - 1) {
+        
+    if (DEBUG) {
+      std::cout << "Entering last dimension";
+      std::cout << "d: " << d << std::endl;
+      std::cout << "offset: " << offset << std::endl;
+      std::cout << "cnt: " << *cnt << std::endl;
+      std::cout << "ELEM_SIZE: " << ELEM_SIZE << std::endl;
+      std::cout << "shape[d]: " << shape[d] << std::endl;
+      std::cout << "strides[d]: " << strides[d] << std::endl;
+    }
+
+    for (size_t i = 0; i < shape[d]; i++) {
+      process_index(*cnt, offset + strides[d] * i);
+      (*cnt) += 1;
+    }
+  } else {
+    if (DEBUG) {
+      std::cout << "Entering dimension: " << d << std::endl;
+      std::cout << "offset: " << offset << std::endl;
+      std::cout << "cnt: " << *cnt << std::endl;
+      std::cout << "ELEM_SIZE: " << ELEM_SIZE << std::endl;
+      std::cout << "shape[d]: " << shape[d] << std::endl;
+      std::cout << "strides[d]: " << strides[d] << std::endl;
+    }
+
+    for (size_t i = 0; i < shape[d]; i++) {
+      ViewIteratorHelper(shape, strides, offset + strides[d] * i, d + 1, cnt, process_index);
+    }
+  }
+}
 
 
 void Compact(const AlignedArray& a, AlignedArray* out, std::vector<uint32_t> shape,
@@ -62,10 +101,15 @@ void Compact(const AlignedArray& a, AlignedArray* out, std::vector<uint32_t> sha
    *  void (you need to modify out directly, rather than returning anything; this is true for all the
    *  function will implement here, so we won't repeat this note.)
    */
-  /// BEGIN YOUR SOLUTION
-  
-  /// END YOUR SOLUTION
+  size_t cnt = 0;
+  size_t d = 0;
+  auto process_index = [&](size_t compact_i, size_t stride_i) {
+    out->ptr[compact_i] = a.ptr[stride_i];
+  };
+  ViewIteratorHelper(shape, strides, offset, d, &cnt, process_index);
 }
+
+
 
 void EwiseSetitem(const AlignedArray& a, AlignedArray* out, std::vector<uint32_t> shape,
                   std::vector<uint32_t> strides, size_t offset) {
@@ -79,9 +123,12 @@ void EwiseSetitem(const AlignedArray& a, AlignedArray* out, std::vector<uint32_t
    *   strides: strides of the *out* array (not a, which has compact strides)
    *   offset: offset of the *out* array (not a, which has zero offset, being compact)
    */
-  /// BEGIN YOUR SOLUTION
-  
-  /// END YOUR SOLUTION
+  size_t cnt = 0;
+  size_t d = 0;
+  auto process_index = [&](size_t compact_i, size_t stride_i) {
+    out->ptr[stride_i] = a.ptr[compact_i];
+  };
+  ViewIteratorHelper(shape, strides, offset, d, &cnt, process_index);
 }
 
 void ScalarSetitem(const size_t size, scalar_t val, AlignedArray* out, std::vector<uint32_t> shape,
@@ -99,10 +146,12 @@ void ScalarSetitem(const size_t size, scalar_t val, AlignedArray* out, std::vect
    *   strides: strides of the out array
    *   offset: offset of the out array
    */
-
-  /// BEGIN YOUR SOLUTION
-  
-  /// END YOUR SOLUTION
+  size_t cnt = 0;
+  size_t d = 0;
+  auto process_index = [&](size_t compact_i, size_t stride_i) {
+    out->ptr[stride_i] = val;
+  };
+  ViewIteratorHelper(shape, strides, offset, d, &cnt, process_index);
 }
 
 void EwiseAdd(const AlignedArray& a, const AlignedArray& b, AlignedArray* out) {
