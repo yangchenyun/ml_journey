@@ -95,13 +95,28 @@ __global__ void CompactKernel(const scalar_t *a, scalar_t *out, size_t size,
    *   out: CUDA point to out array
    *   size: size of out array
    *   shape: vector of shapes of a and out arrays (of type CudaVec, for past
-   * passing to CUDA kernel) strides: vector of strides of out array offset:
-   * offset of out array
+   * passing to CUDA kernel) 
+   *   strides: vector of strides of  array offset
+   *   offset: of a array
    */
   size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 
   /// BEGIN YOUR SOLUTION
+  assert(shape.size == strides.size);
+  size_t d = shape.size;
+  size_t aid = gid;
 
+  // NOTE: Guaranteed that each gid would contains index in all dimensions
+  for (size_t di = 0; di < d; di++)
+  {
+    // BUG: assume strides are in descending order...
+    offset += (aid / strides.data[di]) * strides.data[di];
+    aid %= strides.data[di]; 
+    assert((aid / strides.data[di]) == 0); 
+  }
+
+  assert(aid == 0);
+  out[gid] = a[offset];
   /// END YOUR SOLUTION
 }
 
@@ -123,9 +138,12 @@ void Compact(const CudaArray &a, CudaArray *out, std::vector<uint32_t> shape,
    *   offset: offset of the *a* array (not out, which has zero offset, being
    * compact)
    */
+  
 
   // Nothing needs to be added here
   CudaDims dim = CudaOneDim(out->size);
+  // NOTE: Syntax <<<>>> is used to launch a kernel function on the GPU, specifying grid and block.
+  // Here , each grid and block is a 1 d-array; work is paralleled with 256 thread per block.
   CompactKernel<<<dim.grid, dim.block>>>(
       a.ptr, out->ptr, out->size, VecToCuda(shape), VecToCuda(strides), offset);
 }
