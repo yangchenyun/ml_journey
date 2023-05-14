@@ -64,6 +64,14 @@ def cuda():
     except ImportError:
         return BackendDevice("cuda", None)
 
+def triton():
+    """Return cuda device"""
+    try:
+        from . import ndarray_backend_triton
+        return BackendDevice("triton", ndarray_backend_triton)
+    except ImportError:
+        return BackendDevice("triton", None)
+
 
 def cpu_numpy():
     """Return numpy device"""
@@ -81,7 +89,7 @@ def default_device():
 
 def all_devices():
     """return a list of all available devices"""
-    return [cpu(), cuda(), cpu_numpy()]
+    return [cpu(), cuda(), cpu_numpy(), triton()]
 
 
 class NDArray:
