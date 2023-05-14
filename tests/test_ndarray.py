@@ -382,9 +382,8 @@ def test_scalar_div(device):
 def test_scalar_power(device):
     A = np.random.randn(5, 5)
     B = nd.array(A, device=device)
-    np.testing.assert_allclose(np.power(A, 5.), (B**5.).numpy(), atol=1e-5, rtol=1e-5)
-    np.testing.assert_allclose(np.power(A, 0.5), (B**0.5).numpy(), atol=1e-5, rtol=1e-5)
-
+    for r in [1., 5., .5]:
+        np.testing.assert_allclose(np.power(A, r), (B**r).numpy(), atol=1e-5, rtol=1e-5)
 
 @pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
 def test_scalar_maximum(device):

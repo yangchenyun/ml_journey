@@ -238,36 +238,6 @@ void ScalarSetitem(size_t size, scalar_t val, CudaArray *out,
 // Elementwise and scalar operations
 ////////////////////////////////////////////////////////////////////////////////
 
-__global__ void EwiseAddKernel(const scalar_t *a, const scalar_t *b,
-                               scalar_t *out, size_t size) {
-  size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
-  if (gid < size)
-    out[gid] = a[gid] + b[gid];
-}
-
-void EwiseAdd(const CudaArray &a, const CudaArray &b, CudaArray *out) {
-  /**
-   * Add together two CUDA array
-   */
-  CudaDims dim = CudaOneDim(out->size);
-  EwiseAddKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size);
-}
-
-__global__ void ScalarAddKernel(const scalar_t *a, scalar_t val, scalar_t *out,
-                                size_t size) {
-  size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
-  if (gid < size)
-    out[gid] = a[gid] + val;
-}
-
-void ScalarAdd(const CudaArray &a, scalar_t val, CudaArray *out) {
-  /**
-   * Add together a CUDA array and a scalar value.
-   */
-  CudaDims dim = CudaOneDim(out->size);
-  ScalarAddKernel<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size);
-}
-
 /**
  * In the code the follows, use the above template to create analogous
  * elementise and and scalar operators for the following functions.  See the
@@ -289,7 +259,78 @@ void ScalarAdd(const CudaArray &a, scalar_t val, CudaArray *out) {
  */
 
 /// BEGIN YOUR SOLUTION
+#define SCALAR_BINARY_OP(OPNAME, OP) \
+__global__ void Scalar##OPNAME##Kernel(const scalar_t *a, scalar_t val, scalar_t *out, \
+                                size_t size) { \
+  size_t gid = blockIdx.x * blockDim.x + threadIdx.x; \
+  if (gid < size) \
+    out[gid] = a[gid] OP val; \
+} \
+void Scalar##OPNAME(const CudaArray &a, scalar_t val, CudaArray *out) { \
+  CudaDims dim = CudaOneDim(out->size); \
+  Scalar##OPNAME##Kernel<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size); \
+}
+#define SCALAR_BINARY_OP_FN(OPNAME, OP_FN) \
+__global__ void Scalar##OPNAME##Kernel(const scalar_t *a, scalar_t val, scalar_t *out, \
+                                size_t size) { \
+  size_t gid = blockIdx.x * blockDim.x + threadIdx.x; \
+  if (gid < size) \
+    out[gid] = OP_FN(a[gid], val); \
+} \
+void Scalar##OPNAME(const CudaArray &a, scalar_t val, CudaArray *out) { \
+  CudaDims dim = CudaOneDim(out->size); \
+  Scalar##OPNAME##Kernel<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size); \
+}
 
+#define EWISE_BINARY_OP(OPNAME, OP) \
+__global__ void Ewise##OPNAME##Kernel(const scalar_t *a, const scalar_t *b, \
+                               scalar_t *out, size_t size) { \
+  size_t gid = blockIdx.x * blockDim.x + threadIdx.x; \
+  if (gid < size) \
+    out[gid] = a[gid] OP b[gid]; \
+}; \
+void Ewise##OPNAME(const CudaArray &a, const CudaArray &b, CudaArray *out) { \
+  CudaDims dim = CudaOneDim(out->size); \
+  Ewise##OPNAME##Kernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size); \
+}
+#define EWISE_UNARY_OP(OPNAME, OP) \
+__global__ void Ewise##OPNAME##Kernel(const scalar_t *a, \
+                               scalar_t *out, size_t size) { \
+  size_t gid = blockIdx.x * blockDim.x + threadIdx.x; \
+  if (gid < size) \
+    out[gid] = OP(a[gid]); \
+}; \
+void Ewise##OPNAME(const CudaArray &a, CudaArray *out) { \
+  CudaDims dim = CudaOneDim(out->size); \
+  Ewise##OPNAME##Kernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, out->size); \
+}
+
+EWISE_BINARY_OP(Add, +)
+EWISE_BINARY_OP(Mul, *)
+EWISE_BINARY_OP(Div, /)
+EWISE_BINARY_OP(Eq, ==)
+EWISE_BINARY_OP(Ge, >=)
+EWISE_UNARY_OP(Log, log)
+EWISE_UNARY_OP(Exp, exp)
+EWISE_UNARY_OP(Tanh, tanh)
+__global__ void EwiseMaximumKernel(const scalar_t *a, const scalar_t *b, scalar_t *out, size_t size) {
+  size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (gid < size)
+    out[gid] = max(a[gid], b[gid]);
+};
+
+void EwiseMaximum(const CudaArray &a, const CudaArray &b, CudaArray *out) {
+  CudaDims dim = CudaOneDim(out->size);
+  EwiseMaximumKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size);
+}
+
+SCALAR_BINARY_OP(Add, +)
+SCALAR_BINARY_OP(Mul, *)
+SCALAR_BINARY_OP(Div, /)
+SCALAR_BINARY_OP(Eq, ==)
+SCALAR_BINARY_OP(Ge, >=)
+SCALAR_BINARY_OP_FN(Maximum, max)
+SCALAR_BINARY_OP_FN(Power, pow)
 /// END YOUR SOLUTION
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -416,22 +457,22 @@ PYBIND11_MODULE(ndarray_backend_cuda, m) {
   m.def("ewise_add", EwiseAdd);
   m.def("scalar_add", ScalarAdd);
 
-  // m.def("ewise_mul", EwiseMul);
-  // m.def("scalar_mul", ScalarMul);
-  // m.def("ewise_div", EwiseDiv);
-  // m.def("scalar_div", ScalarDiv);
-  // m.def("scalar_power", ScalarPower);
+  m.def("ewise_mul", EwiseMul);
+  m.def("scalar_mul", ScalarMul);
+  m.def("ewise_div", EwiseDiv);
+  m.def("scalar_div", ScalarDiv);
+  m.def("scalar_power", ScalarPower);
 
-  // m.def("ewise_maximum", EwiseMaximum);
-  // m.def("scalar_maximum", ScalarMaximum);
-  // m.def("ewise_eq", EwiseEq);
-  // m.def("scalar_eq", ScalarEq);
-  // m.def("ewise_ge", EwiseGe);
-  // m.def("scalar_ge", ScalarGe);
+  m.def("ewise_maximum", EwiseMaximum);
+  m.def("scalar_maximum", ScalarMaximum);
+  m.def("ewise_eq", EwiseEq);
+  m.def("scalar_eq", ScalarEq);
+  m.def("ewise_ge", EwiseGe);
+  m.def("scalar_ge", ScalarGe);
 
-  // m.def("ewise_log", EwiseLog);
-  // m.def("ewise_exp", EwiseExp);
-  // m.def("ewise_tanh", EwiseTanh);
+  m.def("ewise_log", EwiseLog);
+  m.def("ewise_exp", EwiseExp);
+  m.def("ewise_tanh", EwiseTanh);
 
   m.def("matmul", Matmul);
 
