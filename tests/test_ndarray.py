@@ -59,7 +59,12 @@ def check_same_memory(original, view):
      "np_fn": lambda X: X.transpose()[3:7,2:5],
      "nd_fn": lambda X: X.permute((1, 0))[3:7,2:5]
     },   
-], ids=["transpose", "broadcast_to", "reshape1", "reshape2", "reshape3", "getitem1", "getitem2", "transposegetitem"])
+    {
+     "shape": (4, 5, 6),
+     "np_fn": lambda X: X[1, 2, 3],
+     "nd_fn": lambda X: X[1, 2, 3],
+    },
+], ids=["transpose", "broadcast_to", "reshape1", "reshape2", "reshape3", "getitem1", "getitem2", "transposegetitem", "slice"])
 @pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
 def test_compact(params, device):
     shape, np_fn, nd_fn = params['shape'], params['np_fn'], params['nd_fn']

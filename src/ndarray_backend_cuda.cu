@@ -83,6 +83,33 @@ void Fill(CudaArray *out, scalar_t val) {
 // Untility function to convert contiguous index i to memory location from
 // strides
 
+__device__ size_t CompactIndex(size_t gid, CudaVec shape, CudaVec strides) {
+  assert(shape.size == strides.size);
+  size_t d = shape.size;
+  size_t aid = gid;
+  size_t offset = 0;
+  for (size_t di = 0; di < d; di++)
+  {
+    size_t step_size = 1;
+    if (di != d - 1) {
+      for (size_t j = di + 1; j < d; j++) {
+        step_size *= shape.data[j];
+      }
+    }
+    auto idx = (aid / step_size);
+    // NOTE: Calculate indices based on gid, strides and shape
+    // Step 1: offset for current dimension
+    // Step 2: subtract the total number has accounted in current dimension
+    offset += idx * strides.data[di];
+    aid -= idx * step_size;
+  }
+  assert(aid == 0);
+  return offset;
+}
+
+__device__ void CompactProcess(const scalar_t *a, scalar_t *out, size_t stride_i, size_t compact_i) {
+  out[compact_i] = a[stride_i];
+}
 __global__ void CompactKernel(const scalar_t *a, scalar_t *out, size_t size,
                               CudaVec shape, CudaVec strides, size_t offset) {
   /**
@@ -100,23 +127,9 @@ __global__ void CompactKernel(const scalar_t *a, scalar_t *out, size_t size,
    *   offset: of a array
    */
   size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
-
   /// BEGIN YOUR SOLUTION
-  assert(shape.size == strides.size);
-  size_t d = shape.size;
-  size_t aid = gid;
-
-  // NOTE: Guaranteed that each gid would contains index in all dimensions
-  for (size_t di = 0; di < d; di++)
-  {
-    // BUG: assume strides are in descending order...
-    offset += (aid / strides.data[di]) * strides.data[di];
-    aid %= strides.data[di]; 
-    assert((aid / strides.data[di]) == 0); 
-  }
-
-  assert(aid == 0);
-  out[gid] = a[offset];
+  offset += CompactIndex(gid, shape, strides);
+  CompactProcess(a, out, offset, gid);
   /// END YOUR SOLUTION
 }
 
