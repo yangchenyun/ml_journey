@@ -44,6 +44,18 @@ CudaDims CudaOneDim(size_t size) {
   return dim;
 }
 
+CudaDims CudaTwoDim(size_t x_size, size_t y_size) {
+  CudaDims dim;
+  // xt*yt = α * BASE_THREAD_NUM
+  size_t x_threads = std::min(static_cast<int>(x_size), static_cast<int>(sqrt(BASE_THREAD_NUM * x_size / y_size)));
+  size_t y_threads = std::min(static_cast<int>(y_size), static_cast<int>(sqrt(BASE_THREAD_NUM * y_size / x_size)));
+  size_t x_blocks = (x_size + x_threads - 1) / x_threads;
+  size_t y_blocks = (y_size + y_threads - 1) / y_threads;
+  dim.block = dim3(x_threads, y_threads, 1);
+  dim.grid = dim3(x_blocks, y_blocks, 1);
+  return dim;
+}
+
 #define MAX_VEC_SIZE 8
 struct CudaVec {
   uint32_t size;
@@ -337,6 +349,25 @@ SCALAR_BINARY_OP_FN(Power, pow)
 // Elementwise and scalar operations
 ////////////////////////////////////////////////////////////////////////////////
 
+__global__ void MatmulKernel(
+  const scalar_t *a, const scalar_t *b, scalar_t *out, 
+  uint32_t M, uint32_t N, uint32_t P) {
+  size_t xid = blockIdx.x * blockDim.x + threadIdx.x;
+  size_t yid = blockIdx.y * blockDim.y + threadIdx.y;
+  if (xid >= M || yid >= P) {
+    return;
+  }
+  if (blockIdx.y == 0) {
+    assert(yid == threadIdx.y);
+  }
+
+  out[xid * P + yid] = 0;
+  for (size_t i = 0; i < N; i++)
+  {
+      out[xid * P + yid] += a[xid * N + i] * b[i * P + yid];
+  }
+}
+
 void Matmul(const CudaArray &a, const CudaArray &b, CudaArray *out, uint32_t M,
             uint32_t N, uint32_t P) {
   /**
@@ -362,9 +393,18 @@ void Matmul(const CudaArray &a, const CudaArray &b, CudaArray *out, uint32_t M,
    *   N: columns of a / rows of b
    *   P: columns of b / out
    */
-
   /// BEGIN YOUR SOLUTION
+  CudaDims dim = CudaTwoDim(M, P);
 
+  printf("dim.grid.x: %d, dim.grid.y: %d, dim.grid.z: %d\n", dim.grid.x, dim.grid.y, dim.grid.z);
+  printf("dim.block.x: %d, dim.block.y: %d, dim.block.z: %d\n", dim.block.x, dim.block.y, dim.block.z);
+  printf("M, N, P: %d, %d, %d\n", M, N, P);
+
+  MatmulKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, M, N, P);
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) {
+      printf("Error: Kernel launch error: %s\n", cudaGetErrorString(err));
+  }
   /// END YOUR SOLUTION
 }
 
