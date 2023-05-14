@@ -4,67 +4,56 @@ sys.path.append('/home/steveyang/.jupyternb/hw3/python')
 import numpy as np
 import needle as ndl
 from needle import backend_ndarray as nd
-import timeit
-import statistics
-import matplotlib.pyplot as plt
+
+# %% 
+import triton
+@triton.testing.perf_report(
+    triton.testing.Benchmark(
+        x_names=['N'],  # argument names to use as an x-axis for the plot
+        x_vals=[
+            2 ** i for i in range(5, 11)
+        ],  # different possible values for `x_name`
+        line_arg='provider',  # argument name whose value corresponds to a different line in the plot
+        line_vals=[
+            'cpu',
+            'cuda',
+            # 'triton',
+        ],  # possible values for `line_arg``
+        line_names=[
+            "CPU",
+            "CUDA",
+            # "Triton",
+        ],  # label name for the lines
+        styles=[('blue', '-'), ('green', '-'), ('red', '--')],  # line styles
+        ylabel="GB/s",  # label name for the y-axis
+        plot_name="matmul-performance",  # name for the plot. Used also as a file name for saving the plot.
+        args={},  # values for function arguments not in `x_names` and `y_name`
+    )
+)
+def benchmark(N, provider):
+    shape = (N, N)
+    device = None
+    if provider == 'cpu':
+        device = nd.cpu()
+    if provider == 'cuda':
+        device = nd.cuda()
+    if provider == 'triton':
+        device = nd.triton()
+
+    _A = np.random.randint(low=0, high=10, size=shape)
+    _B = np.random.randint(low=0, high=10, size=shape)
+    A = nd.array(_A, device=device)
+    B = nd.array(_B, device=device)
+
+
+    def matmul():
+        return A @ B
+    ms, min_ms, max_ms = triton.testing.do_bench(matmul)
+
+    gbps = lambda ms: _A.size**2*_A.itemsize * 1e-9 / (ms * 1e-3)
+    return gbps(ms), gbps(max_ms), gbps(min_ms)
+
 
 # %%
-shape = np.arange(5, 12)
-shapes = [(2**s, 2**s) for s in shape]
-devices = [nd.cuda(), nd.cpu()]
-n_runs = 100
-results = {str(device): {} for device in devices}
-
+benchmark.run(show_plots=True, print_data=True)
 # %%
-for device in devices:
-    for shape in shapes:
-        if device == nd.cpu() and shape[0] > 256:
-            continue
-        _A = np.random.randint(low=0, high=10, size=shape)
-        _B = np.random.randint(low=0, high=10, size=shape)
-        A = nd.array(_A, device=device)
-        B = nd.array(_B, device=device)
-
-        def matmul():
-            return A @ B
-
-        times = timeit.repeat(matmul, number=n_runs)
-
-        print("Device:", device)
-        print("Shape:", shape)
-        avg_time = statistics.mean(times)
-        std_dev = statistics.stdev(times)
-        print("Average time:", avg_time)
-        print("Standard deviation:", std_dev)
-        print()
-
-        results[str(device)][str(shape)] = (avg_time, std_dev)
-
-# %%
-# Plotting
-fig, axs = plt.subplots(2, 1, figsize=(8, 12))
-
-ax = axs[0]
-for device, device_results in results.items():
-    labels = list(device_results.keys())
-    avg_times = [res[0] for res in device_results.values()]
-    std_devs = [res[1] for res in device_results.values()]
-    ax.errorbar(labels, avg_times, yerr=std_devs, fmt='o', label=str(device))
-
-ax.legend()
-ax.set_title('Matrix multiplication time by shape and device')
-ax.set_xlabel('Shape')
-ax.set_ylabel('Time (s)')
-ax.tick_params(axis='x', rotation='vertical')
-
-ax = axs[1]
-cpu_times = [res[0] for res in results[str(nd.cpu())].values()]
-gpu_times = [res[0] for res in results[str(nd.cuda())].values()]
-ratios = [cpu / gpu for cpu, gpu in zip(cpu_times, gpu_times)]
-ax.plot(labels, ratios, 'o-')
-ax.set_title('CPU/GPU time ratio')
-ax.set_xlabel('Shape')
-ax.set_ylabel('Ratio')
-
-plt.tight_layout()
-plt.show()
