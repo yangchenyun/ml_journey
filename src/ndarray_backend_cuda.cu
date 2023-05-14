@@ -39,7 +39,7 @@ CudaDims CudaOneDim(size_t size) {
    */
   CudaDims dim;
   size_t num_blocks = (size + BASE_THREAD_NUM - 1) / BASE_THREAD_NUM;
-  dim.block = dim3(BASE_THREAD_NUM, 1, 1);
+  dim.block = dim3(std::min(static_cast<int>(size), BASE_THREAD_NUM), 1, 1);
   dim.grid = dim3(num_blocks, 1, 1);
   return dim;
 }
