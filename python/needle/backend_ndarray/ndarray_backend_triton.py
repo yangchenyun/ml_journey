@@ -137,8 +137,7 @@ def ewise_setitem(a, out, shape, strides, offset):
 
     grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
     ewise_setitem_kernel[grid](
-        a.array, out.array, n_elements, tshape, tstrides, d, offset, BLOCK_SIZE=128
-    )
+        a.array, out.array, n_elements, tshape, tstrides, d, offset, BLOCK_SIZE=128)
     return out
 
 
@@ -175,75 +174,209 @@ def scalar_setitem(size, val, out, shape, strides, offset):
     tstrides = torch.tensor(strides, device="cuda", dtype=torch.int32)
     d = len(shape)
 
+    # TODO: BLOCK_SIZE > 2 would still cause error
     grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
     scalar_setitem_kernel[grid](
         val, out.array, n_elements, tshape, tstrides, d, offset, BLOCK_SIZE=1
     )
     return out
 
+op_enum = {
+    "add": 0,
+    "mul": 1,
+    "div": 2,
+    "eq": 3,
+    "ge": 4,
+    "log": 5,
+    "exp": 6,
+    "tanh": 7,
+    "power": 8,
+    "maximum": 9,
+}
+
+@triton.jit
+def ewise_unary_op_kernel(
+    a_ptr,
+    out_ptr,
+    n_elements,
+    op_code,
+    BLOCK_SIZE: tl.constexpr,
+):
+    pid = tl.program_id(axis=0)
+    block_start = pid * BLOCK_SIZE
+    offsets = block_start + tl.arange(0, BLOCK_SIZE)
+    mask = offsets < n_elements
+    a = tl.load(a_ptr + offsets, mask=mask)
+
+    # NOTE: strict grammar on if/else, and output initialization
+    if op_code == 5:
+        output = tl.log(a)
+        tl.store(out_ptr + offsets, output, mask=mask)
+    elif op_code == 6:
+        output = tl.exp(a)
+        tl.store(out_ptr + offsets, output, mask=mask)
+    elif op_code == 7:
+        output = (tl.exp(a) - tl.exp(-a)) / (tl.exp(a) + tl.exp(-a))
+        tl.store(out_ptr + offsets, output, mask=mask)
+
+
+@triton.jit
+def ewise_binary_op_kernel(
+    a_ptr,
+    b_ptr,
+    out_ptr,
+    n_elements,
+    op_code,
+    BLOCK_SIZE: tl.constexpr,
+):
+    pid = tl.program_id(axis=0)
+    block_start = pid * BLOCK_SIZE
+    offsets = block_start + tl.arange(0, BLOCK_SIZE)
+    mask = offsets < n_elements
+    a = tl.load(a_ptr + offsets, mask=mask)
+    b = tl.load(b_ptr + offsets, mask=mask)
+
+    # NOTE: strict grammar on if/else, and output initialization
+    if op_code == 0:
+        output = a + b
+        tl.store(out_ptr + offsets, output, mask=mask)
+    elif op_code == 1:
+        output = a * b
+        tl.store(out_ptr + offsets, output, mask=mask)
+    elif op_code == 2:
+        output = a / b
+        tl.store(out_ptr + offsets, output, mask=mask)
+    elif op_code == 3:
+        output = a == b
+        tl.store(out_ptr + offsets, output, mask=mask)
+    elif op_code == 4:
+        output = a > b
+        tl.store(out_ptr + offsets, output, mask=mask)
+    elif op_code == 9:
+        output = tl.maximum(a, b)
+        tl.store(out_ptr + offsets, output, mask=mask)
+
+@triton.jit
+def scalar_binary_op_kernel(
+    a_ptr,
+    val,
+    out_ptr,
+    n_elements,
+    op_code,
+    BLOCK_SIZE: tl.constexpr,
+):
+    pid = tl.program_id(axis=0)
+    block_start = pid * BLOCK_SIZE
+    offsets = block_start + tl.arange(0, BLOCK_SIZE)
+    mask = offsets < n_elements
+    a = tl.load(a_ptr + offsets, mask=mask)
+
+    # NOTE: strict grammar on if/else, and output initialization
+    if op_code == 0:
+        output = a + val
+        tl.store(out_ptr + offsets, output, mask=mask)
+    elif op_code == 1:
+        output = a * val
+        tl.store(out_ptr + offsets, output, mask=mask)
+    elif op_code == 2:
+        output = a / val
+        tl.store(out_ptr + offsets, output, mask=mask)
+    elif op_code == 3:
+        output = a == val
+        tl.store(out_ptr + offsets, output, mask=mask)
+    elif op_code == 4:
+        output = a > val
+        tl.store(out_ptr + offsets, output, mask=mask)
+    elif op_code == 8:
+        output = a ** val
+        tl.store(out_ptr + offsets, output, mask=mask)
+    elif op_code == 9:
+        output = tl.maximum(a, val)
+        tl.store(out_ptr + offsets, output, mask=mask)
+
+def ewise_binary_op(a, b, out, op_name):
+    assert a.array.is_cuda and b.array.is_cuda and out.array.is_cuda
+    n_elements = out.array.numel()
+    grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
+    ewise_binary_op_kernel[grid](a.array, b.array, out.array, n_elements, op_enum[op_name], BLOCK_SIZE=1024)
+    return out
+
+def ewise_unary_op(a, out, op_name):
+    assert a.array.is_cuda and out.array.is_cuda
+    n_elements = out.array.numel()
+    grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
+    ewise_unary_op_kernel[grid](a.array, out.array, n_elements, op_enum[op_name], BLOCK_SIZE=1024)
+    return out
+
+def scalar_binary_op(a, val, out, op_name):
+    assert a.array.is_cuda and out.array.is_cuda
+    n_elements = out.array.numel()
+    grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
+    scalar_binary_op_kernel[grid](a.array, val, out.array, n_elements, op_enum[op_name], BLOCK_SIZE=1024)
+    return out
 
 def ewise_add(a, b, out):
-    raise NotImplementedError
+    return ewise_binary_op(a, b, out, "add")
 
 
 def scalar_add(a, val, out):
-    raise NotImplementedError
+    return scalar_binary_op(a, val, out, "add")
 
 
 def ewise_mul(a, b, out):
-    raise NotImplementedError
+    return ewise_binary_op(a, b, out, "mul")
 
 
 def scalar_mul(a, val, out):
-    raise NotImplementedError
+    return scalar_binary_op(a, val, out, "mul")
 
 
 def ewise_div(a, b, out):
-    raise NotImplementedError
+    return ewise_binary_op(a, b, out, "div")
 
 
 def scalar_div(a, val, out):
-    raise NotImplementedError
+    return scalar_binary_op(a, val, out, "div")
 
 
 def scalar_power(a, val, out):
-    raise NotImplementedError
+    return scalar_binary_op(a, val, out, "power")
 
 
 def ewise_maximum(a, b, out):
-    raise NotImplementedError
+    return ewise_binary_op(a, b, out, "maximum")
 
 
 def scalar_maximum(a, val, out):
-    raise NotImplementedError
+    return scalar_binary_op(a, val, out, "maximum")
 
 
 def ewise_eq(a, b, out):
-    raise NotImplementedError
+    return ewise_binary_op(a, b, out, "eq")
 
 
 def scalar_eq(a, val, out):
-    raise NotImplementedError
+    return scalar_binary_op(a, val, out, "eq")
 
 
 def ewise_ge(a, b, out):
-    raise NotImplementedError
+    return ewise_binary_op(a, b, out, "ge")
 
 
 def scalar_ge(a, val, out):
-    raise NotImplementedError
+    return scalar_binary_op(a, val, out, "get")
 
 
 def ewise_log(a, out):
-    raise NotImplementedError
+    return ewise_unary_op(a, out, "log")
 
 
 def ewise_exp(a, out):
-    raise NotImplementedError
+    return ewise_unary_op(a, out, "exp")
 
 
 def ewise_tanh(a, out):
-    raise NotImplementedError
+    return ewise_unary_op(a, out, "tanh")
 
 
 def matmul(a, b, out, m, n, p):
