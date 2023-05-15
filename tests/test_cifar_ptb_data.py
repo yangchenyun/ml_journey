@@ -3,7 +3,6 @@ sys.path.append('./python')
 import itertools
 import numpy as np
 import pytest
-import mugrade
 
 import needle as ndl
 from needle import backend_ndarray as nd
@@ -75,6 +74,7 @@ TEST_BATCH_SIZES = [3, 5]
 TEST_BPTT = [6, 10]
 
 def mugrade_submit(x):
+    import mugrade
     if isinstance(x, np.ndarray):
         x = x.flatten()[:128]
         #print(x)

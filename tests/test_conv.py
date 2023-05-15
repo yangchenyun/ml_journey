@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 from needle import backend_ndarray as nd
 import needle as ndl
-import mugrade
 import itertools
 
 
@@ -511,6 +510,7 @@ def RandC(*shape, entropy=1):
 
 
 def MugradeSubmit(things):
+    import mugrade
     mugrade.submit(Prepare(things))
     #print(Prepare(things))
 

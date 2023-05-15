@@ -3,7 +3,6 @@ sys.path.append('./python')
 import itertools
 import numpy as np
 import pytest
-import mugrade
 import torch
 
 import needle as ndl
@@ -255,6 +254,7 @@ TEST_GETSETITEM_PARAMS = [((3, 2), (2, 1)), ((3, 3, 4), (2, np.s_[2:], np.s_[:3]
 
 
 def mugrade_submit(x):
+    import mugrade
     if isinstance(x, np.ndarray):
         x = x.flatten()[:64]
         #print(x)

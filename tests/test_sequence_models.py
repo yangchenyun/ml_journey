@@ -5,7 +5,6 @@ import numpy as np
 import pytest
 import torch
 import itertools
-import mugrade
 
 import needle as ndl
 import needle.nn as nn
@@ -258,6 +257,7 @@ TEST_EMBEDDING_SIZES = [8]
 TEST_SEQ_MODEL = ['rnn', 'lstm']
 
 def mugrade_submit(x):
+    import mugrade
     if isinstance(x, np.ndarray):
         x = x.flatten()[:64]
         #print(x)
