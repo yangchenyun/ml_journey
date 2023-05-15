@@ -382,13 +382,43 @@ def ewise_tanh(a, out):
 def matmul(a, b, out, m, n, p):
     raise NotImplementedError
 
+@triton.jit
+def reduce_max_kernel(
+    a_ptr, out_ptr, n_elements, 
+    op_code,
+    reduce_size: tl.constexpr,   # TODO: Only works if reduce_size is power of 2
+    BLOCK_SIZE: tl.constexpr):
+    pid = tl.program_id(axis=0)
+
+    for i in range(0, BLOCK_SIZE):
+        tid = pid * BLOCK_SIZE + i
+        if tid < n_elements:
+            a_offset = tid * reduce_size + tl.arange(0, reduce_size)
+            a = tl.load(a_ptr + a_offset)
+            if op_code == 0:
+                out = tl.max(a, axis=0)
+                tl.store(out_ptr + tid, out)
+            elif op_code == 1:
+                out = tl.sum(a, axis=0)
+                tl.store(out_ptr + tid, out)
 
 def reduce_max(a, out, reduce_size):
-    raise NotImplementedError
-
+    assert a.array.is_cuda and out.array.is_cuda
+    n_elements = out.array.numel()
+    grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
+    reduce_max_kernel[grid](a.array, out.array, n_elements, 0,
+                            reduce_size,
+                            BLOCK_SIZE=1024)
+    return out
 
 def reduce_sum(a, out, reduce_size):
-    raise NotImplementedError
+    assert a.array.is_cuda and out.array.is_cuda
+    n_elements = out.array.numel()
+    grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
+    reduce_max_kernel[grid](a.array, out.array, n_elements, 1,
+                            reduce_size,
+                            BLOCK_SIZE=1024)
+    return out
 
 
 # %%
