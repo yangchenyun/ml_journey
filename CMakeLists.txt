@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.2)
 project(needle C CXX)
 
 # find correct version of Python
+set(Python_FIND_VIRTUALENV ONLY) # Search exclusively in virtualenvs
 execute_process(COMMAND python3-config --prefix
   OUTPUT_VARIABLE Python_ROOT_DIR)
 find_package(Python COMPONENTS Development Interpreter REQUIRED)
@@ -33,8 +34,10 @@ list(APPEND LINKER_LIBS ${pybind11_LIBRARIES})
 add_library(ndarray_backend_cpu MODULE src/ndarray_backend_cpu.cc)
 target_link_libraries(ndarray_backend_cpu PUBLIC ${LINKER_LIBS})
 pybind11_extension(ndarray_backend_cpu)
-pybind11_strip(ndarray_backend_cpu)
 
+if(NOT ${CMAKE_BUILD_TYPE} MATCHES "Debug")
+  pybind11_strip(ndarray_backend_cpu)
+endif()
 
 # directly output to ffi folder
 set_target_properties(ndarray_backend_cpu
