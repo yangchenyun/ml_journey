@@ -233,25 +233,23 @@ class NDArray:
         Reshape the matrix without copying memory.  This will return a matrix
         that corresponds to a reshaped array but points to the same memory as
         the original array.
-
         Raises:
             ValueError if product of current shape is not equal to the product
             of the new shape, or if the matrix is not compact.
-
         Args:
             new_shape (tuple): new shape of the array
-
         Returns:
-            NDArray : reshaped array; this will point to thep
+            NDArray : reshaped array; this will point to the same memory as the original NDArray.
         """
-
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        assert prod(self.shape) == prod(new_shape)
+        new_strides = self.compact_strides(new_shape)
+        return NDArray.make(
+            new_shape, new_strides, device=self.device, handle=self._handle
+        )
 
     def permute(self, new_axes):
         """
-        Permute order of the dimensions.  new_axes describes a permuation of the
+        Permute order of the dimensions.  new_axes describes a permutation of the
         existing axes, so e.g.:
           - If we have an array with dimension "BHWC" then .permute((0,3,1,2))
             would convert this to "BCHW" order.
@@ -259,20 +257,22 @@ class NDArray:
         Like reshape, this operation should not copy memory, but achieves the
         permuting by just adjusting the shape/strides of the array.  That is,
         it returns a new array that has the dimensions permuted as desired, but
-        which points to the same memroy as the original array.
-
+        which points to the same memory as the original array.
         Args:
-            new_axes (tuple): permuation order of the dimensions
-
+            new_axes (tuple): permutation order of the dimensions
         Returns:
             NDarray : new NDArray object with permuted dimensions, pointing
             to the same memory as the original NDArray (i.e., just shape and
             strides changed).
         """
-
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        assert len(new_axes) == len(self.shape)
+        assert len(new_axes) == len(self.strides)
+        # Strides are locations, here we just perform the permutations
+        new_shape = tuple([self.shape[i] for i in new_axes])
+        new_strides = tuple([self.strides[i] for i in new_axes])
+        return NDArray.make(
+            new_shape, new_strides, device=self.device, handle=self._handle
+        )
 
     def broadcast_to(self, new_shape):
         """
@@ -281,22 +281,24 @@ class NDArray:
         the size = 1 (which can then be broadcast to any size).  As with the
         previous calls, this will not copy memory, and just achieves
         broadcasting by manipulating the strides.
-
         Raises:
             assertion error if new_shape[i] != shape[i] for all i where
             shape[i] != 1
-
         Args:
             new_shape (tuple): shape to broadcast to
-
         Returns:
             NDArray: the new NDArray object with the new broadcast shape; should
             point to the same memory as the original array.
         """
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
-
+        # The axis which is been broadcasted, has stride 0: it doesn't change during iteration
+        assert len(new_shape) == len(self.shape)
+        assert all([new_shape[i] == self.shape[i] for i in range(self.ndim)
+                    if self.shape[i] != 1])
+        new_strides = tuple([self.strides[i] if self.shape[i] != 1 else 0 
+                       for i in range(len(self.shape))])
+        return NDArray.make(
+            new_shape, new_strides, device=self.device, handle=self._handle
+        )
     ### Get and set elements
 
     def process_slice(self, sl, dim):
@@ -359,10 +361,17 @@ class NDArray:
             ]
         )
         assert len(idxs) == self.ndim, "Need indexes equal to number of dimensions"
+        new_strides = tuple([self.strides[d] * idxs[d].step for d in range(self.ndim)])
+        # NOTE: math.ceil to deal with odd cases like 5/2 = 2.5
+        new_shape = tuple([math.ceil((idxs[d].stop - idxs[d].start) / idxs[d].step)
+                           for d in range(self.ndim)])
+        # NOTE: the idea here is that to discard first n elements in every dimensions
+        axis_offset = sum([idxs[d].start * self.strides[d] for d in range(self.ndim)])
 
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        return NDArray.make(
+            new_shape, new_strides, device=self.device, handle=self._handle,
+            offset=self._offset + axis_offset
+        )
 
     def __setitem__(self, idxs, other):
         """Set the values of a view into an array, using the same semantics
