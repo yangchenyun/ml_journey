@@ -2,6 +2,8 @@
 import needle
 from typing import List, Optional, NamedTuple, Tuple, Union
 from collections import namedtuple
+from collections import defaultdict
+from functools import reduce
 import numpy
 from needle import init
 
@@ -10,6 +12,8 @@ LAZY_MODE = False
 TENSOR_COUNTER = 0
 
 from .backend_selection import Device, array_api, NDArray, default_device
+
+import numpy as array_api
 
 
 class Op:
@@ -228,6 +232,8 @@ class Tensor(Value):
 
     @staticmethod
     def _array_from_numpy(numpy_array, device, dtype):
+        if isinstance(numpy_array, NDArray):
+            numpy_array = numpy_array.numpy()
         if array_api is numpy:
             return numpy.array(numpy_array, dtype=dtype)
         return array_api.array(numpy_array, device=device, dtype=dtype)
@@ -314,9 +320,10 @@ class Tensor(Value):
             return needle.ops.MulScalar(other)(self)
 
     def __pow__(self, other):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        if isinstance(other, Tensor):
+            raise NotImplementedError()
+        else:
+            return needle.ops.PowerScalar(other)(self)
 
     def __sub__(self, other):
         if isinstance(other, Tensor):
@@ -357,6 +364,31 @@ class Tensor(Value):
     def transpose(self, axes=None):
         return needle.ops.Transpose(axes)(self)
 
+    def relu(self):
+        return needle.ops.ReLU()(self)
+
+    def exp(self):
+        return needle.ops.Exp()(self)
+
+    def logsumexp(self, axes=None):
+        return needle.ops.LogSumExp(axes)(self)
+
+    def argmax(self, axis=None):
+        return needle.ops.ArgMax(axis)(self)
+
+    # TODO: Causing hashing issues in dictionary
+    # def __eq__(self, other):
+    #     if isinstance(other, Tensor):
+    #         return needle.ops.EWiseEq()(self, other)
+    #     else:
+    #         return super().__eq__(other)
+
+    def __ne__(self, other):
+        if isinstance(other, Tensor):
+            return needle.ops.EWiseNe()(self, other)
+        else:
+            raise NotImplementedError()
+
     __radd__ = __add__
     __rmul__ = __mul__
     __rmatmul__ = __matmul__
@@ -368,17 +400,31 @@ def compute_gradient_of_variables(output_tensor, out_grad):
     Store the computed result in the grad field of each Variable.
     """
     # a map from node to a list of gradient contributions from each output node
-    node_to_output_grads_list: Dict[Tensor, List[Tensor]] = {}
+    node_to_output_grads_list: Dict[Tensor, List[Tensor]] = defaultdict(lambda: [])
     # Special note on initializing gradient of
     # We are really taking a derivative of the scalar reduce_sum(output_node)
     # instead of the vector output_node. But this is the common case for loss function.
     node_to_output_grads_list[output_tensor] = [out_grad]
+
     # Traverse graph in reverse topological order given the output_node that we are taking gradient wrt.
     reverse_topo_order = list(reversed(find_topo_sort([output_tensor])))
 
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+    for node in reverse_topo_order:
+        grads_list = node_to_output_grads_list[node] 
+        assert grads_list, f"WARNING: no grads: {grads_list}"
+        for g in grads_list:
+            assert grads_list[0].shape == g.shape, f"WARNING: shape mismatch: {grads_list[0]} {grads_list[0].shape} != {g.shape}"
+
+        node.grad = reduce(lambda a, b: a + b, grads_list)
+
+        if node.op is None:  # leaf node
+            assert len(node.inputs) == 0, "Expect leaf node to have length 0"
+            continue 
+
+        input_grads = node.op.gradient_as_tuple(node.grad, node)
+
+        for x, dx in zip(node.inputs, input_grads):
+            node_to_output_grads_list[x].append(dx)
 
 
 def find_topo_sort(node_list: List[Value]) -> List[Value]:
@@ -389,16 +435,20 @@ def find_topo_sort(node_list: List[Value]) -> List[Value]:
     after all its predecessors are traversed due to post-order DFS, we get a topological
     sort.
     """
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
-
+    visited = set()
+    topo_order = []
+    for n in node_list:
+        topo_sort_dfs(n, visited, topo_order)
+    return topo_order
 
 def topo_sort_dfs(node, visited, topo_order):
     """Post-order DFS"""
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+    if node in visited:
+        return
+    visited.add(node)
+    for child in node.inputs:
+        topo_sort_dfs(child, visited, topo_order)
+    topo_order.append(node)
 
 
 ##############################
@@ -410,5 +460,4 @@ def sum_node_list(node_list):
     """Custom sum function in order to avoid create redundant nodes in Python sum implementation."""
     from operator import add
     from functools import reduce
-
     return reduce(add, node_list)
