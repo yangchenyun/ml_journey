@@ -5,12 +5,12 @@ from typing import Optional, List
 from .autograd import NDArray
 from .autograd import Op, Tensor, Value, TensorOp
 from .autograd import TensorTuple, TensorTupleOp
-import numpy
+import numpy as np
 import functools
 import needle
 
-import numpy as array_api
-# from .backend_selection import array_api, NDArray
+# import numpy as array_api
+from .backend_selection import array_api, NDArray
 
 
 class MakeTensorTuple(TensorTupleOp):
@@ -103,7 +103,7 @@ class AddScalar(TensorOp):
         self.scalar = scalar
 
     def compute(self, a: NDArray):
-        return a + numpy.float32(self.scalar)
+        return a + np.float32(self.scalar)
 
     def gradient(self, out_grad: Tensor, node: Tensor):
         return out_grad
@@ -144,7 +144,7 @@ class MulScalar(TensorOp):
         self.scalar = scalar
 
     def compute(self, a: NDArray):
-        return a * numpy.float32(self.scalar)
+        return a * np.float32(self.scalar)
 
     def gradient(self, out_grad: Tensor, node: Tensor):
         return (out_grad * self.scalar,)
@@ -175,7 +175,7 @@ class EWiseDiv(TensorOp):
     """Op to element-wise divide two nodes."""
 
     def compute(self, a, b):
-        return array_api.divide(a, b,dtype=a.dtype)
+        return a / b
 
     def gradient(self, out_grad, node):
         a, b = node.inputs
@@ -197,7 +197,7 @@ class DivScalar(TensorOp):
         self.scalar = scalar
 
     def compute(self, a):
-        return array_api.divide(a, self.scalar, dtype=a.dtype)
+        return a / np.float32(self.scalar)
 
     def gradient(self, out_grad, node):
         return (out_grad * (1/self.scalar),)
@@ -270,7 +270,7 @@ class Summation(TensorOp):
         self.axes = axes
 
     def compute(self, a):
-        return array_api.sum(a, axis=self.axes)
+        return array_api.summation(a, axis=self.axes)
 
     def gradient(self, out_grad, node):
         """
@@ -333,7 +333,7 @@ def sum_to_shape(x, to_shape):
 
 class MatMul(TensorOp):
     def compute(self, a, b):
-        return array_api.matmul(a, b)
+        return a @ b
 
     def gradient(self, out_grad, node):
         a, b = node.inputs
@@ -357,7 +357,7 @@ def matmul(a, b):
 
 class Negate(TensorOp):
     def compute(self, a):
-        return array_api.negative(a)
+        return -a
 
     def gradient(self, out_grad, node):
         return (-out_grad,)
@@ -414,18 +414,21 @@ class LogSumExp(TensorOp):
         # The dimension which is summed out would be 1, rest unchanged.
         new_shape = [1] * len(Z.shape)
         for i in range(len(new_shape)):
-            if self.axes and i not in self.axes:
-                new_shape[i] = Z.shape[i]
+            if self.axes is not None:
+                if isinstance(self.axes, tuple):
+                    if i not in self.axes: new_shape[i] = Z.shape[i]
+                elif isinstance(self.axes, int):
+                    if i != self.axes: new_shape[i] = Z.shape[i]
         return tuple(new_shape)
 
 
     def compute(self, Z):
-        maxZ = array_api.amax(Z, axis=self.axes)
+        maxZ = array_api.max(Z, axis=self.axes)
         new_shape = self.restore_shape(Z)
-        return array_api.log(
-            array_api.sum(
-                array_api.exp(Z - maxZ.reshape(new_shape)),
-                axis=self.axes)) + maxZ
+        return ((Z - maxZ.reshape(new_shape).broadcast_to(Z.shape))
+                .exp()
+                .sum(axis=self.axes)
+                .log()) + maxZ
 
     def gradient(self, out_grad, node):
         """
@@ -439,10 +442,10 @@ class LogSumExp(TensorOp):
         """
         input = node.inputs[0].realize_cached_data()
 
-        max_in = array_api.amax(input, axis=self.axes)
+        max_in = array_api.max(input, axis=self.axes)
         input_exp = array_api.exp(input - max_in.reshape(self.restore_shape(input)))
 
-        input_exp_sum = array_api.sum(input_exp, axis=self.axes)
+        input_exp_sum = array_api.summation(input_exp, axis=self.axes)
         gradient = input_exp / input_exp_sum.reshape(self.restore_shape(input))
 
         # NOTE: out_grad also has dimension reduced, here restore it
@@ -454,16 +457,17 @@ def logsumexp(a, axes=None):
 
 
 class Tanh(TensorOp):
+    def __init__(self):
+        self.cached_tanh = None
+
     def compute(self, a):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        a_exp2 = a.exp() * a.exp()
+        return (a_exp2 - 1) / (a_exp2 + 1)
 
     def gradient(self, out_grad, node):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
-
+        input = node.inputs[0]
+        tanh = self.compute(input)
+        return out_grad * (1 - tanh ** 2)
 
 def tanh(a):
     return Tanh()(a)

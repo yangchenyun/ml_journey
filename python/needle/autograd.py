@@ -13,7 +13,7 @@ TENSOR_COUNTER = 0
 
 from .backend_selection import Device, array_api, NDArray, default_device
 
-import numpy as array_api
+# import numpy as array_api
 
 
 class Op:

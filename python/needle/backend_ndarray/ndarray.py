@@ -633,13 +633,22 @@ def log(a):
 def exp(a):
     return a.exp()
 
-
 def tanh(a):
     return a.tanh()
 
 def flip(a, axes):
     return a.flip(axes)
 
+def max(a, axis=None, keepdims=False):
+    return a.max(axis=axis, keepdims=keepdims)
 
 def summation(a, axis=None, keepdims=False):
     return a.sum(axis=axis, keepdims=keepdims)
+
+def power(a, scalar, dtype=None):
+    return a ** scalar
+
+def swapaxes(a, axis1, axis2):
+    new_axes = list(range(a.ndim))
+    new_axes[axis1], new_axes[axis2] = new_axes[axis2], new_axes[axis1]
+    return a.permute(tuple(new_axes))
