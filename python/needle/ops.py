@@ -139,7 +139,6 @@ class EWiseEq(TensorOp):
     def gradient(self, out_grad, node):
         raise NotImplementedError("Gradient for EWiseEq not implemented yet.")
 
-
 class MulScalar(TensorOp):
     def __init__(self, scalar):
         self.scalar = scalar
@@ -162,7 +161,7 @@ class PowerScalar(TensorOp):
         self.scalar = scalar
 
     def compute(self, a: NDArray) -> NDArray:
-        return array_api.power(a, self.scalar)
+        return array_api.power(a, self.scalar, dtype=a.dtype)
 
     def gradient(self, out_grad, node):
         a = node.inputs[0]
@@ -176,7 +175,7 @@ class EWiseDiv(TensorOp):
     """Op to element-wise divide two nodes."""
 
     def compute(self, a, b):
-        return array_api.divide(a, b)
+        return array_api.divide(a, b, dtype=a.dtype)
 
     def gradient(self, out_grad, node):
         a, b = node.inputs
@@ -198,7 +197,7 @@ class DivScalar(TensorOp):
         self.scalar = scalar
 
     def compute(self, a):
-        return array_api.divide(a, self.scalar)
+        return array_api.divide(a, self.scalar, dtype=a.dtype)
 
     def gradient(self, out_grad, node):
         return (out_grad * (1/self.scalar),)
@@ -448,7 +447,7 @@ class LogSumExp(TensorOp):
 
         # NOTE: out_grad also has dimension reduced, here restore it
         # for broadcasting to work properly
-        return out_grad.reshape(self.restore_shape(input)) * needle.Tensor(gradient)
+        return out_grad.reshape(self.restore_shape(input)) * needle.Tensor(gradient, dtype=out_grad.dtype)
 
 def logsumexp(a, axes=None):
     return LogSumExp(axes=axes)(a)
