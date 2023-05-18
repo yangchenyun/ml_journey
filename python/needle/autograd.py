@@ -413,7 +413,13 @@ def compute_gradient_of_variables(output_tensor, out_grad):
         grads_list = node_to_output_grads_list[node] 
         assert grads_list, f"WARNING: no grads: {grads_list}"
         for g in grads_list:
-            assert grads_list[0].shape == g.shape, f"WARNING: shape mismatch: {grads_list[0]} {grads_list[0].shape} != {g.shape}"
+            assert type(grads_list[0]) == type(g)
+            if isinstance(g, Tensor):
+                assert grads_list[0].shape == g.shape, f"WARNING: shape mismatch: {grads_list[0]} {grads_list[0].shape} != {g.shape}"
+            elif isinstance(g, TensorTuple):
+                assert grads_list[0][0].shape == g[0].shape, f"WARNING: shape mismatch: {grads_list[0][0]} {grads_list[0][0].shape} != {g[0].shape}"
+            else:
+                raise Exception("Unknown grad types.")
 
         node.grad = reduce(lambda a, b: a + b, grads_list)
 

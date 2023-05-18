@@ -362,25 +362,38 @@ def test_stack(device, params):
         nd.stack(*arrays, axis=axis).numpy(), np.stack(_arrays, axis=axis), atol=1e-5, rtol=1e-5)
 
 split_params = [
-    {"shape": (2), "axis": 0, "num": 2},
-    {"shape": (4), "axis": 0, "num": 2},
-    {"shape": (2, 1), "axis": 0, "num": 2},
-    {"shape": (1, 2), "axis": 1, "num": 2},
-    {"shape": (2, 4), "axis": 1, "num": 2},
-    {"shape": (2, 16), "axis": 1, "num": 8},
-    {"shape": (2, 1, 2), "axis": 2, "num": 2},
-    {"shape": (4, 8, 16), "axis": 2, "num": 8},
+    {"shape": (2,), "axis": 0},
+    {"shape": (4,), "axis": 0},
+    {"shape": (2, 1), "axis": 0},
+    {"shape": (1, 2), "axis": 1},
+    {"shape": (2, 4), "axis": 1},
+    {"shape": (2, 16), "axis": 1},
+    {"shape": (2, 5, 5), "axis": 0},
+    {"shape": (2, 1, 2), "axis": 2},
+    {"shape": (4, 8, 16), "axis": 2},
 ]
 @pytest.mark.parametrize("params", split_params)
 @pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
 def test_split(device, params):
-    shape, axis, n = params['shape'], params['axis'], params['num']
+    shape, axis = params['shape'], params['axis']
+    n = shape[axis]
     _arrays = [np.random.randint(low=0, high=10, size=shape) for _ in range(n)]
     _stacked = np.stack(_arrays, axis=axis)
     stacked = nd.array(_stacked, device=device)
     np.testing.assert_allclose(
         [a.numpy() for a in nd.split(stacked, n, axis=axis)],
         np.split(_stacked, n, axis=axis), atol=1e-5, rtol=1e-5)
+
+@pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
+def test_split_1(device):
+    axis = 0
+    n = 2
+    _stacked = np.ones((2, 5, 5))
+    stacked = nd.array(_stacked, device=device)
+    np.testing.assert_allclose(
+        [a.numpy() for a in nd.split(stacked, n, axis=axis)],
+        np.split(_stacked, n, axis=axis), atol=1e-5, rtol=1e-5)
+
 
 matmul_dims = [
     # naive version

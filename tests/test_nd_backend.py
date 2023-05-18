@@ -1,6 +1,7 @@
 import sys
 sys.path.append('./python')
 import itertools
+from functools import reduce
 import numpy as np
 import pytest
 import torch
@@ -141,9 +142,11 @@ def test_tanh_backward(shape, device):
     backward_check(ndl.tanh, A)
 
 
-STACK_PARAMETERS = [((5, 5), 0, 1),
+STACK_PARAMETERS = [
+    ((5, 5), 0, 1),
     ((5, 5), 0, 2),
-    ((1,5,7), 2, 5)]
+    ((1,5,7), 2, 5)
+    ]
 @pytest.mark.parametrize("shape, axis, l", STACK_PARAMETERS)
 @pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
 def test_stack(shape, axis, l, device):
@@ -167,6 +170,35 @@ def test_stack_backward(shape, axis, l, device):
     torch.stack(A_t, dim=axis).sum().backward()
     for i in range(l):
         np.testing.assert_allclose(A_t[i].grad.numpy(), A[i].grad.numpy(), atol=1e-5, rtol=1e-5)
+
+SPLIT_PARAMETERS = [
+    ((5, 5), 0),
+    ((5, 5), 0),
+    ((1, 5, 7), 2)
+    ]
+@pytest.mark.parametrize("shape, axis", SPLIT_PARAMETERS)
+@pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
+def test_split(shape, axis, device):
+    l = shape[axis]
+    _A = np.random.randn(*shape).astype(np.float32)
+    A = ndl.Tensor(nd.array(_A), device=device)
+    A_t = torch.Tensor(_A)
+    out = ndl.split(A, axis=axis)
+    out_t = torch.split(A_t, 1, dim=axis)  # torch specifies split_size instead of split_number
+    for i in range(l):
+        np.testing.assert_allclose(out_t[i].numpy(), out[i].numpy(), atol=1e-5, rtol=1e-5)
+
+@pytest.mark.parametrize("shape, axis", SPLIT_PARAMETERS)
+@pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
+def test_split_backward(shape, axis, device):
+    l = shape[axis]
+    _A = np.random.randn(*shape).astype(np.float32)
+    A = ndl.Tensor(nd.array(_A), device=device)
+    A_t = torch.Tensor(_A); A_t.requires_grad = True
+    reduce(lambda a, b: a + b, ndl.split(A, axis=axis)).sum().backward()
+    reduce(lambda a, b: a + b, torch.split(A_t, 1, dim=axis)).sum().backward()
+    np.testing.assert_allclose(
+        A.grad.numpy(), A_t.grad.numpy(), atol=1e-5, rtol=1e-5)
 
 
 SUMMATION_PARAMETERS = [((1, 1, 1), None),

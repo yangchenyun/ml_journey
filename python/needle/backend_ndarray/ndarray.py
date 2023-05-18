@@ -695,10 +695,11 @@ def split(ary, n, axis=0):
     ary_split_shape.insert(axis, n)
 
     splitted_ary = (ary
+                    .compact() # convert to continuous arrays
                     .reshape(ary_split_shape)
                     .permute(tuple([axis] + [a for a in range(ary.ndim + 1) if a != axis])))
 
-    result = tuple([splitted_ary[i].compact().reshape(out_shape) 
+    result = tuple([splitted_ary[i].compact().reshape(out_shape) # copy to each output array as well
               for i in range(n)])
 
     return result

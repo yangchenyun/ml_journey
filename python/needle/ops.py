@@ -8,6 +8,7 @@ from .autograd import TensorTuple, TensorTupleOp
 import numpy as np
 import functools
 import needle
+from needle import init
 
 # import numpy as array_api
 from .backend_selection import array_api, NDArray
@@ -281,7 +282,7 @@ class Summation(TensorOp):
 
         # support None, rebroad cast to [1, ..., 1]
         if self.axes is None:
-            axes = []
+            axes = [i for i in range(len(a.shape))]
         elif not isinstance(self.axes, (list, tuple)):
             axes = [self.axes]
         else:
@@ -295,7 +296,6 @@ class Summation(TensorOp):
                         for i, _ in enumerate(a.shape)]
 
         # print(f"[Summation] outgrad: {out_grad.shape} -> origin {origin_shape} -> broadcast {a.shape}")
-
         if size(origin_shape) == size(out_grad.shape):
             out_grad = out_grad.reshape(origin_shape)
 
@@ -484,16 +484,14 @@ class Stack(TensorOp):
         self.axis = axis
 
     def compute(self, args):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
-
+        return array_api.stack(*args, axis=self.axis)
 
     def gradient(self, out_grad, node):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
-
+        input_arrays = node.inputs[0]  # input has been made as a tuple
+        out = split(out_grad, self.axis)
+        assert len(out) == len(input_arrays), "Gradient length mismatch"
+        return make_tuple(*[out[i].reshape(in_ary.shape) 
+                           for i, in_ary in enumerate(input_arrays)])
 
 def stack(args, axis):
     return Stack(axis)(make_tuple(*args))
@@ -510,14 +508,13 @@ class Split(TensorTupleOp):
         self.axis = axis
 
     def compute(self, A):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        return array_api.split(A, A.shape[self.axis], axis=self.axis)
 
     def gradient(self, out_grad, node):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        In = node.inputs[0]
+        out = stack(out_grad, axis=self.axis).reshape(In.shape)
+        assert len(out.shape) == len(In.shape)
+        return out
 
 
 def split(a, axis):
@@ -601,6 +598,3 @@ class Conv(TensorOp):
 
 def conv(a, b, stride=1, padding=1):
     return Conv(stride, padding)(a, b)
-
-
-
