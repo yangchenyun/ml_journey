@@ -394,6 +394,31 @@ def test_split_1(device):
         [a.numpy() for a in nd.split(stacked, n, axis=axis)],
         np.split(_stacked, n, axis=axis), atol=1e-5, rtol=1e-5)
 
+flip_params = [
+    {"shape": (2,), "axis": 0},
+    {"shape": (4,), "axis": 0},
+    {"shape": (2, 1), "axis": 0},
+    {"shape": (1, 2), "axis": 1},
+    {"shape": (2, 4), "axis": (0,1)},
+    {"shape": (2, 16), "axis": (0,1)},
+    {"shape": (2, 1, 2), "axis": 0},
+    {"shape": (2, 1, 2), "axis": 1},
+    {"shape": (2, 1, 2), "axis": 2},
+    {"shape": (2, 1, 2), "axis": (0, 1, 2)},
+    {"shape": (4, 8, 16), "axis": (0, 1, 2)},
+]
+@pytest.mark.parametrize("params", flip_params)
+@pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
+def test_flip(device, params):
+    shape, axis = params['shape'], params['axis']
+    axes = axis if isinstance(axis, tuple) else (axis,)
+    _A = np.random.randn(*shape)
+    A = nd.array(_A, device=device)
+    np.testing.assert_allclose(
+        nd.flip(A, axes).numpy(),
+        np.flip(_A, axes),
+        atol=1e-5, rtol=1e-5)
+
 
 matmul_dims = [
     # naive version

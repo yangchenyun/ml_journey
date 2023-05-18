@@ -604,8 +604,24 @@ class NDArray:
         Note: compact() before returning.
         """
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        strides = tuple([-self.strides[a] if a in axes else self.strides[a]
+                         for a in range(len(self.shape))])
+
+        # NOTE, start from the last element
+        offset = sum([self.strides[a] * (self.shape[a] - 1)
+                      for a in range(len(self.shape))
+                      if a in axes])
+
+        flipped = NDArray.make(
+            self.shape,
+            strides,
+            device=self.device,
+            handle=self._handle,
+            offset=offset
+        )
+
+        return flipped.compact()
+        # END YOUR SOLUTION
 
 
     def pad(self, axes):
