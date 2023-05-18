@@ -341,6 +341,46 @@ def test_broadcast_to(device, params):
     compare_strides(lhs, rhs)
     check_same_memory(A, rhs)
 
+stack_params = [
+    {"shape": (1), "axis": 0, "num": 2},
+    {"shape": (2), "axis": 0, "num": 2},
+    {"shape": (2), "axis": 0, "num": 8},
+    {"shape": (1, 1), "axis": 0, "num": 2},
+    {"shape": (1, 1), "axis": 1, "num": 2},
+    {"shape": (2, 4), "axis": 1, "num": 2},
+    {"shape": (2, 4), "axis": 1, "num": 8},
+    {"shape": (2, 4, 1), "axis": 2, "num": 2},
+    {"shape": (4, 8, 16), "axis": 2, "num": 8},
+]
+@pytest.mark.parametrize("params", stack_params)
+@pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
+def test_stack(device, params):
+    shape, axis, n = params['shape'], params['axis'], params['num']
+    _arrays = [np.random.randint(low=0, high=10, size=shape) for _ in range(n)]
+    arrays = [nd.array(_array, device=device) for _array in _arrays]
+    np.testing.assert_allclose(
+        nd.stack(*arrays, axis=axis).numpy(), np.stack(_arrays, axis=axis), atol=1e-5, rtol=1e-5)
+
+split_params = [
+    {"shape": (2), "axis": 0, "num": 2},
+    {"shape": (4), "axis": 0, "num": 2},
+    {"shape": (2, 1), "axis": 0, "num": 2},
+    {"shape": (1, 2), "axis": 1, "num": 2},
+    {"shape": (2, 4), "axis": 1, "num": 2},
+    {"shape": (2, 16), "axis": 1, "num": 8},
+    {"shape": (2, 1, 2), "axis": 2, "num": 2},
+    {"shape": (4, 8, 16), "axis": 2, "num": 8},
+]
+@pytest.mark.parametrize("params", split_params)
+@pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
+def test_split(device, params):
+    shape, axis, n = params['shape'], params['axis'], params['num']
+    _arrays = [np.random.randint(low=0, high=10, size=shape) for _ in range(n)]
+    _stacked = np.stack(_arrays, axis=axis)
+    stacked = nd.array(_stacked, device=device)
+    np.testing.assert_allclose(
+        [a.numpy() for a in nd.split(stacked, n, axis=axis)],
+        np.split(_stacked, n, axis=axis), atol=1e-5, rtol=1e-5)
 
 matmul_dims = [
     # naive version

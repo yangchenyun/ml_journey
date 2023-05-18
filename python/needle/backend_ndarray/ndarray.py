@@ -354,12 +354,18 @@ class NDArray:
         # handle singleton as tuple, everything as slices
         if not isinstance(idxs, tuple):
             idxs = (idxs,)
-        idxs = tuple(
-            [
-                self.process_slice(s, i) if isinstance(s, slice) else slice(s, s + 1, 1)
-                for i, s in enumerate(idxs)
-            ]
-        )
+
+        # support partial indexing for high-dimentional array
+        for i in range(self.ndim):
+            if i > len(idxs) - 1:
+                idxs = idxs + (slice(None, None),)
+
+        idxs = tuple([
+            self.process_slice(s, i) if isinstance(
+                s, slice) else slice(s, s + 1, 1)
+            for i, s in enumerate(idxs)
+        ])
+
         assert len(idxs) == self.ndim, "Need indexes equal to number of dimensions"
         new_strides = tuple([self.strides[d] * idxs[d].step for d in range(self.ndim)])
         # NOTE: math.ceil to deal with odd cases like 5/2 = 2.5
@@ -625,10 +631,8 @@ def reshape(array, new_shape):
 def maximum(a, b):
     return a.maximum(b)
 
-
 def log(a):
     return a.log()
-
 
 def exp(a):
     return a.exp()
@@ -652,3 +656,32 @@ def swapaxes(a, axis1, axis2):
     new_axes = list(range(a.ndim))
     new_axes[axis1], new_axes[axis2] = new_axes[axis2], new_axes[axis1]
     return a.permute(tuple(new_axes))
+
+def stack(*arrays, axis=0):
+    assert all(a.shape == arrays[0].shape for a in arrays)
+    # insert the extra dimension
+    n = len(arrays)
+    out_shape = list(arrays[0].shape)
+    out_shape.insert(axis, n)
+    out = NDArray.make(out_shape, device=arrays[0].device)
+    # Create a view of the output array with the joined dimension as the first dimension
+    out_as = out.permute(tuple([axis] + [a for a in range(out.ndim) if a != axis]))
+    for i, a in enumerate(arrays):
+        out_as[i] = a
+    return out
+
+def split(ary, n, axis=0):
+    assert (ary.shape[axis] // n * n) == ary.shape[axis], "only support even split for now"
+    out_shape = tuple([ary.shape[a] if a != axis else ary.shape[a] // n
+                 for a in range(ary.ndim)])
+    ary_split_shape = list(out_shape)
+    ary_split_shape.insert(axis, n)
+
+    splitted_ary = (ary
+                    .reshape(ary_split_shape)
+                    .permute(tuple([axis] + [a for a in range(ary.ndim + 1) if a != axis])))
+
+    result = tuple([splitted_ary[i].compact().reshape(out_shape) 
+              for i in range(n)])
+
+    return result
