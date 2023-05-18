@@ -256,6 +256,28 @@ def parse_mnist(image_filename, label_filename):
     return images, labels
 
 
+def unpickle(file):
+    import pickle
+    with open(file, 'rb') as fo:
+        dict = pickle.load(fo, encoding='bytes')
+    return dict
+
+
+def read_cifar_10(batch_files):
+    """Read cifar10 files from base_folder, and return arrays of images and labels.
+    """
+    X = []
+    y = []
+    for filename in batch_files:
+        data = unpickle(filename)
+        X.append(data[b'data'])
+        y += data[b'labels']
+    # CIFAR is in C,H,W
+    X = np.vstack(X).reshape(-1, 3, 32, 32)
+    y = np.array(y)
+    return X / 255.0, y
+
+
 class CIFAR10Dataset(Dataset):
     def __init__(
         self,
@@ -273,26 +295,24 @@ class CIFAR10Dataset(Dataset):
         X - numpy array of images
         y - numpy array of labels
         """
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        training_files = [os.path.join(base_folder, f'data_batch_{batch}') for batch in range(1, 6)]
+        test_files = [os.path.join(base_folder, 'test_batch')]
+        self.X, self.Y = read_cifar_10(training_files if train else test_files)
+        assert len(self.X) == len(self.Y), "Number of images and labels must match"
+        assert (self.X >= 0.0).all() and (self.X <= 1.0).all(), "All entries of self.X must be between 0.0 and 1.0"
 
     def __getitem__(self, index) -> object:
         """
         Returns the image, label at given index
         Image should be of shape (3, 32, 32)
         """
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        return self.X[index], self.Y[index]
 
     def __len__(self) -> int:
         """
         Returns the total number of examples in the dataset
         """
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        return len(self.X)
 
 
 class NDArrayDataset(Dataset):
