@@ -83,6 +83,21 @@ def all_devices():
     """return a list of all available devices"""
     return [cpu(), cuda(), cpu_numpy()]
 
+def extend_axes(reduce_fn):
+    """Decorector to support reduction over multiple dimensions.
+
+    Not the most efficient implementation, but it works in the Python land.
+    """
+    def wrapped(a, axis=None, *args, **kwargs):
+        if axis is None or isinstance(axis, int):
+            return reduce_fn(a, axis, *args, **kwargs)
+        else:
+            axis = list(axis)
+            while axis:
+                a = reduce_fn(a, axis.pop(), *args, **kwargs)
+            return a
+
+    return wrapped
 
 class NDArray:
     """A generic ND array class that may contain multipe different backends
@@ -570,11 +585,13 @@ class NDArray:
             )
         return view, out
 
+    @extend_axes
     def sum(self, axis=None, keepdims=False):
         view, out = self.reduce_view_out(axis, keepdims=keepdims)
         self.device.reduce_sum(view.compact()._handle, out._handle, view.shape[-1])
         return out
 
+    @extend_axes
     def max(self, axis=None, keepdims=False):
         view, out = self.reduce_view_out(axis, keepdims=keepdims)
         self.device.reduce_max(view.compact()._handle, out._handle, view.shape[-1])
