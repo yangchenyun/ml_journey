@@ -307,7 +307,7 @@ class NDArray:
         if start == None:
             start = 0
         if start < 0:
-            start = self.shape[dim]
+            start = self.shape[dim] + start
         if stop == None:
             stop = self.shape[dim]
         if stop < 0:
