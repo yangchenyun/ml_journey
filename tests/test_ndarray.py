@@ -419,6 +419,29 @@ def test_flip(device, params):
         np.flip(_A, axes),
         atol=1e-5, rtol=1e-5)
 
+pad_params = [
+    {"shape": (2,), "axes": ((0, 0),)},
+    {"shape": (2,), "axes": ((1, 1),)},
+    {"shape": (2,), "axes": ((0, 1),)},
+    {"shape": (2,), "axes": ((1, 0),)},
+    {"shape": (4,), "axes": ((1, 1),)},
+    {"shape": (2, 1), "axes": ((0, 0), (0, 0))},
+    {"shape": (2, 1), "axes": ((1, 0), (0, 1))},
+    {"shape": (2, 1), "axes": ((1, 1), (1, 1))},
+    {"shape": (2, 4), "axes": ((1, 1), (1, 1))},
+    {"shape": (2, 4, 8), "axes": ((1, 1), (1, 1), (1, 1))},
+]
+@pytest.mark.parametrize("params", pad_params)
+@pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
+def test_pad(device, params):
+    shape, axes = params['shape'], params['axes']
+    _A = np.random.randn(*shape)
+    A = nd.array(_A, device=device)
+    np.testing.assert_allclose(
+        nd.pad(A, axes).numpy(),
+        np.pad(_A, axes),
+        atol=1e-5, rtol=1e-5)
+
 
 matmul_dims = [
     # naive version

@@ -604,7 +604,7 @@ class NDArray:
         Note: compact() before returning.
         """
         ### BEGIN YOUR SOLUTION
-        strides = tuple([-self.strides[a] if a in axes else self.strides[a]
+        strides = tuple([-self.strides[a] if a in axes else self.strides[a] 
                          for a in range(len(self.shape))])
 
         # NOTE, start from the last element
@@ -613,9 +613,9 @@ class NDArray:
                       if a in axes])
 
         flipped = NDArray.make(
-            self.shape,
-            strides,
-            device=self.device,
+            self.shape, 
+            strides, 
+            device=self.device, 
             handle=self._handle,
             offset=offset
         )
@@ -631,9 +631,13 @@ class NDArray:
         axes = ( (0, 0), (1, 1), (0, 0)) pads the middle axis with a 0 on the left and right side.
         """
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
-
+        new_shape = tuple([self.shape[a] + axes[a][0] + axes[a][1] for a in range(self.ndim)])
+        out = NDArray.make(new_shape, device=self.device)  # allocate new array
+        out.fill(0)  # fill with zeros
+        padded_view = tuple([slice(a[0], out.shape[i]-a[1]) for i, a in enumerate(axes)])
+        out[padded_view] = self
+        return out
+        # END YOUR SOLUTION
 
 
 def array(a, dtype="float32", device=None):
@@ -675,6 +679,9 @@ def tanh(a):
 
 def flip(a, axes):
     return a.flip(axes)
+
+def pad(a, axes):
+    return a.pad(axes)
 
 def max(a, axis=None, keepdims=False):
     return a.max(axis=axis, keepdims=keepdims)
