@@ -442,15 +442,15 @@ class LogSumExp(TensorOp):
         """
         input = node.inputs[0].realize_cached_data()
 
-        max_in = array_api.max(input, axis=self.axes)
-        input_exp = array_api.exp(input - max_in.reshape(self.restore_shape(input)))
+        max_in = array_api.max(input, axis=self.axes, keepdims=True)
+        input_exp = array_api.exp(input - max_in.broadcast_to(input.shape))
 
-        input_exp_sum = array_api.summation(input_exp, axis=self.axes)
-        gradient = input_exp / input_exp_sum.reshape(self.restore_shape(input))
+        input_exp_sum = array_api.summation(input_exp, axis=self.axes, keepdims=True)
+        gradient = input_exp / input_exp_sum.broadcast_to(input.shape)
 
         # NOTE: out_grad also has dimension reduced, here restore it
         # for broadcasting to work properly
-        return out_grad.reshape(self.restore_shape(input)) * needle.Tensor(gradient)
+        return out_grad.reshape(self.restore_shape(input)).broadcast_to(gradient.shape) * needle.Tensor(gradient)
 
 def logsumexp(a, axes=None):
     return LogSumExp(axes=axes)(a)
