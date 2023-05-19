@@ -726,3 +726,29 @@ def split(ary, n, axis=0):
               for i in range(n)])
 
     return result
+
+
+def dilate(ary, axes, dilation):
+    """
+    There are a few ways to view dilation:
+    1. As a permutation of padded elements, requires memory allocation
+    2. Overload the __getitem__ and returns 0 for dilated dimension, requires no memory allocation
+       Access continuous memory would be difficult, how to handle slice access and slice step?
+    3. Like pad, allocate all the memory and use the view to copy the data. 
+    
+    Here we proceed with idea #3.
+    """
+    new_shape = tuple([ary.shape[a] * (dilation + 1) if a in axes else ary.shape[a] 
+                       for a in range(ary.ndim)])
+    out = NDArray.make(new_shape, device=ary.device)  # allocate new array
+    out.fill(0)
+    compact_view = tuple([slice(None, None, dilation + 1) if a in axes else slice(None, None, 1)
+                          for a in range(ary.ndim)])
+    out[compact_view] = ary
+    return out
+
+
+def undilate(ary, axes, dilation):
+    compact_view = tuple([slice(None, None, dilation + 1) if a in axes else slice(None, None, 1)
+                          for a in range(ary.ndim)])
+    return ary[compact_view].compact()
