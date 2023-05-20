@@ -393,6 +393,9 @@ def test_nn_conv_backward(s, cin, cout, k, stride, device):
 
 
 op_conv_shapes = [
+    ( (1, 4, 4, 3), (1, 1, 3, 1), 1, 0 ),
+    ( (1, 2, 2, 3), (1, 1, 3, 1), 1, 0 ), 
+
     ( (3, 14, 14, 8), (3, 3, 8, 16), 1, 0 ),
     ( (3, 14, 14, 8), (3, 3, 8, 16), 1, 1 ),
     ( (3, 16, 16, 8), (3, 3, 8, 16), 1, 2 ),
@@ -427,6 +430,7 @@ def test_op_conv(Z_shape, W_shape, stride, padding, backward, device):
     W = ndl.Tensor(_W, device=device)
     y = ndl.conv(Z, W, padding=padding, stride=stride)
     y2 = y.sum()
+
     if backward:
         y2.backward()
     Ztch = torch.Tensor(_Z).float()
@@ -435,6 +439,7 @@ def test_op_conv(Z_shape, W_shape, stride, padding, backward, device):
     Wtch.requires_grad=True
     out = torch.nn.functional.conv2d(Ztch.permute(0, 3, 1, 2), Wtch.permute(3, 2, 0, 1), padding=padding, stride=stride)
     out2 = out.sum()
+
     if backward:
         out2.backward()
     if backward:
