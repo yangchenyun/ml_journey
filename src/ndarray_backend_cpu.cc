@@ -45,7 +45,7 @@ void Fill(AlignedArray *out, scalar_t val) {
 }
 
 void ViewIteratorHelper(std::vector<uint32_t> shape,
-                        std::vector<uint32_t> strides, size_t offset, size_t d,
+                        std::vector<int32_t> strides, size_t offset, size_t d,
                         size_t *cnt,
                         std::function<void(size_t, size_t)> process_index) {
   if (d == shape.size()) {
@@ -85,7 +85,7 @@ void ViewIteratorHelper(std::vector<uint32_t> shape,
 }
 
 void Compact(const AlignedArray &a, AlignedArray *out,
-             std::vector<uint32_t> shape, std::vector<uint32_t> strides,
+             std::vector<uint32_t> shape, std::vector<int32_t> strides,
              size_t offset) {
   /**
    * Compact an array in memory
@@ -112,7 +112,7 @@ void Compact(const AlignedArray &a, AlignedArray *out,
 }
 
 void EwiseSetitem(const AlignedArray &a, AlignedArray *out,
-                  std::vector<uint32_t> shape, std::vector<uint32_t> strides,
+                  std::vector<uint32_t> shape, std::vector<int32_t> strides,
                   size_t offset) {
   /**
    * Set items in a (non-compact) array
@@ -134,7 +134,7 @@ void EwiseSetitem(const AlignedArray &a, AlignedArray *out,
 }
 
 void ScalarSetitem(const size_t size, scalar_t val, AlignedArray *out,
-                   std::vector<uint32_t> shape, std::vector<uint32_t> strides,
+                   std::vector<uint32_t> shape, std::vector<int32_t> strides,
                    size_t offset) {
   /**
    * Set items is a (non-compact) array
