@@ -7,16 +7,49 @@ import numpy as np
 np.random.seed(0)
 
 
+
+def ConvBN(in_channels, out_channels, kernel_size, stride, device=None):
+    modules = [
+        nn.Conv(in_channels, out_channels, kernel_size, stride,
+                device=device, dtype="float32"),
+        # Feature dimension which is the output from last conv layer
+        nn.BatchNorm2d(out_channels, device=device, dtype="float32"),
+        nn.ReLU()]
+    return nn.Sequential(*modules)
+
+
 class ResNet9(ndl.nn.Module):
     def __init__(self, device=None, dtype="float32"):
         super().__init__()
         ### BEGIN YOUR SOLUTION ###
-        raise NotImplementedError() ###
+        self.model = nn.Sequential(
+            # prep
+            ConvBN(3, 16, 7, 4, device=device),
+            # layer 1
+            ConvBN(16, 32, 3, 2, device=device),
+            nn.Residual(nn.Sequential(
+                ConvBN(32,32,3,1, device=device),
+                ConvBN(32,32,3,1, device=device),
+            )),
+            # layer 2
+            ConvBN(32, 64, 3, 2, device=device),
+            # layer 3, (mistake in graph)
+            ConvBN(64, 128, 3, 2, device=device),
+            nn.Residual(nn.Sequential(
+                ConvBN(128,128,3,1, device=device),
+                ConvBN(128,128,3,1, device=device),
+            )),
+            # classifier
+            nn.Flatten(),
+            nn.Linear(128, 128, device=device),
+            nn.ReLU(),
+            nn.Linear(128, 10, device=device)
+        )
         ### END YOUR SOLUTION
 
     def forward(self, x):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return self.model.forward(x)
         ### END YOUR SOLUTION
 
 
