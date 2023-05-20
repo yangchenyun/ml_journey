@@ -256,6 +256,12 @@ class NDArray:
         Returns:
             NDArray : reshaped array; this will point to the same memory as the original NDArray.
         """
+        if -1 in new_shape:
+            # infer the missing dimension
+            new_shape = list(new_shape)
+            new_shape[new_shape.index(-1)] = np.prod(self.shape) // np.prod(new_shape, where=np.array(new_shape)!=-1)
+            new_shape = tuple(new_shape)
+
         assert prod(self.shape) == prod(new_shape)
         new_strides = self.compact_strides(new_shape)
         return NDArray.make(
