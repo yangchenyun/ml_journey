@@ -253,7 +253,9 @@ class BroadcastTo(TensorOp):
     def gradient(self, out_grad, node):
         """The reverse would add up all the gradient associated with the broadcasted gradient."""
         a = node.inputs[0]
-        da = sum_to_shape(out_grad, a.shape)
+        assert len(a.shape) == len(self.shape), "BroadcastTo only support same dimension broadcasting."
+        axes = tuple(i for i, (x, y) in enumerate(zip(a.shape, self.shape)) if x != y)
+        da = summation(out_grad, axes, keepdims=True)
         assert a.shape == da.shape, f"Expect after: {a.shape} === {da.shape}"
         return da
 
@@ -267,11 +269,12 @@ def size(shape):
     return functools.reduce(lambda a,b: a*b, shape, 1)
 
 class Summation(TensorOp):
-    def __init__(self, axes: Optional[tuple] = None):
+    def __init__(self, axes: Optional[tuple] = None, keepdims: bool = False):
         self.axes = axes
+        self.keepdims = keepdims
 
     def compute(self, a):
-        return array_api.summation(a, axis=self.axes)
+        return array_api.summation(a, axis=self.axes, keepdims=self.keepdims)
 
     def gradient(self, out_grad, node):
         """
@@ -303,33 +306,9 @@ class Summation(TensorOp):
         assert a.shape == da.shape, f"Expect after: {a.shape} === {da.shape}"
         return da
 
-def summation(a, axes=None):
-    return Summation(axes)(a)
+def summation(a, axes=None, keepdims=False):
+    return Summation(axes, keepdims)(a)
 
-
-def sum_to_shape(x, to_shape):
-    axes_to_sum = []
-    # NOTE: right aligned
-    for i in range(len(x.shape)):
-        bi = -1 - i
-        if i >= len(to_shape):
-            axes_to_sum.append(bi)
-        elif x.shape[bi] != to_shape[bi]:
-            axes_to_sum.append(bi)
-    # print(f"Before: {x.shape} -> {to_shape}")
-    # print(f"axes_to_sum: ", axes_to_sum)
-
-    if axes_to_sum:
-        x = x.sum(axes=tuple(axes_to_sum))
-
-    # TODO: Is this always safe for multiple ones????
-    # sum [n, 1, n, 1] -> [n, n]
-    # reshape: [n, n] -> [n, 1, n, 1]
-    x = x.reshape(to_shape)
-
-    assert x.shape == to_shape, f"Expect after: {x.shape} === {to_shape}"
-
-    return x
 
 class MatMul(TensorOp):
     def compute(self, a, b):
@@ -343,8 +322,11 @@ class MatMul(TensorOp):
         da = out_grad @ b.transpose()  # transpose is by default last 2 axises
         db = a.transpose() @ out_grad
 
-        da = sum_to_shape(da, a.shape)
-        db = sum_to_shape(db, b.shape)
+
+        a_axes = tuple(i for i, (x, y) in enumerate(zip(a.shape, da.shape)) if x != y)
+        b_axes = tuple(i for i, (x, y) in enumerate(zip(b.shape, db.shape)) if x != y)
+        da = summation(da, a_axes, keepdims=True)
+        db = summation(db, a_axes, keepdims=True)
 
         assert da.shape == a.shape, f"a: {a.shape}, da: {da.shape}"
         assert db.shape == b.shape, f"b: {b.shape}, da: {db.shape}"
