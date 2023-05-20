@@ -758,3 +758,7 @@ def undilate(ary, axes, dilation):
     compact_view = tuple([slice(None, None, dilation + 1) if a in axes else slice(None, None, 1)
                           for a in range(ary.ndim)])
     return ary[compact_view].compact()
+
+def argmax(ary: NDArray, axis=None):
+    # TODO: Could change to use argmax on device
+    return NDArray(ary.numpy().argmax(axis=axis), device=ary.device)
