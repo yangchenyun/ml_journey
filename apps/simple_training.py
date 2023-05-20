@@ -10,6 +10,13 @@ device = ndl.cpu()
 
 ### CIFAR-10 training ###
 
+def error_count(logits, Yb) -> float: 
+        logits_data = logits.detach()
+        Xprob = (logits_data.exp() / logits_data.exp().sum(axes=(1,)).reshape((-1, 1)))
+        Xpred = Xprob.argmax(axis=1)
+        error_c = (Xpred != Yb).sum().numpy()
+        return error_c
+
 def epoch_general_cifar10(dataloader, model, loss_fn=nn.SoftmaxLoss(), opt=None):
     """
     Iterates over the dataloader. If optimizer is not None, sets the
@@ -29,7 +36,33 @@ def epoch_general_cifar10(dataloader, model, loss_fn=nn.SoftmaxLoss(), opt=None)
     """
     np.random.seed(4)
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    if opt is not None:
+        model.train()
+    else:
+        model.eval()
+
+    running_loss = 0.0
+    running_error_count = 0
+    running_N = 0
+    for batch in dataloader:
+        Xb, Yb = batch
+        batch_size = Xb.shape[0]
+        # forward
+        logits = model(Xb)
+        loss = loss_fn()(logits, Yb)
+
+        # book keeping, no_grad
+        running_error_count += error_count(logits, Yb)
+        running_loss += loss.numpy() * batch_size
+        running_N += batch_size 
+
+        # backward pass, takes place on every batch. "tiny little steps"
+        if model.training:
+            opt.reset_grad()
+            loss.backward()
+            opt.step()
+
+    return running_error_count / running_N, running_loss / running_N
     ### END YOUR SOLUTION
 
 
@@ -53,7 +86,16 @@ def train_cifar10(model, dataloader, n_epochs=1, optimizer=ndl.optim.Adam,
     """
     np.random.seed(4)
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    opt = optimizer(model.parameters(), lr=lr, weight_decay=weight_decay)
+    for i in range(n_epochs):
+        train_error, train_loss = epoch_general_cifar10(dataloader, model, loss_fn, opt)
+        # test_error, test_loss = epoch_general_cifar10(dataloader, model, loss_fn)
+        if i % 1 == 0:
+            print(f"Epoch {i}: train error: {train_error}, train error: {train_error}")
+            # print(f"Epoch {i}: train loss: {train_loss}, test loss: {test_loss}")
+        
+    # return train_error, train_loss, test_error, test_loss
+    return train_error, train_loss
     ### END YOUR SOLUTION
 
 
@@ -72,7 +114,7 @@ def evaluate_cifar10(model, dataloader, loss_fn=nn.SoftmaxLoss):
     """
     np.random.seed(4)
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    return epoch_general_cifar10(dataloader, model, loss_fn)
     ### END YOUR SOLUTION
 
 
