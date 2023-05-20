@@ -6,6 +6,7 @@ from needle import ops
 import needle.init as init
 import numpy as np
 from functools import reduce
+import math
 
 
 class Parameter(Tensor):
@@ -97,7 +98,7 @@ class Linear(Module):
 
 class Flatten(Module):
     def forward(self, X):
-        return X.reshape((X.shape[0], -1))
+        return X.reshape((X.shape[0], math.prod(X.shape[1:])))
 
 class ReLU(Module):
     def forward(self, x: Tensor) -> Tensor:
@@ -169,7 +170,7 @@ class BatchNorm1d(Module):
             normalized = (x - self.running_mean) / (self.running_var + self.eps)**0.5
             
         broadcasted_result = normalized * self.weight.broadcast_to(x.shape) + self.bias.broadcast_to(x.shape)
-        result = normalized * self.weight + self.bias
+        result = normalized * self.weight.broadcast_to(x.shape) + self.bias.broadcast_to(x.shape)
 
         assert np.all(broadcasted_result.numpy() == result.numpy()), "Broadcasting should not change the result"
 
