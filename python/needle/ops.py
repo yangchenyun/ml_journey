@@ -621,9 +621,9 @@ class Conv(TensorOp):
             assert W_g == out_grad.shape[2]
             # slice operator missing
 
+        # Perform a full convolution
         # flip kernel dimensions
         # swap C_in and C_out
-        # out_grad: N,H,W,C_out
         # dW: K,K,C_in,C_out -> K,K,C_out,C_in
         fW = flip(W, (0, 1))
         dZ = conv(out_grad, transpose(fW, (2, 3)), padding=revP)

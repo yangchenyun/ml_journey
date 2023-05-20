@@ -12,7 +12,7 @@ device = ndl.cpu()
 
 def error_count(logits, Yb) -> float: 
         logits_data = logits.detach()
-        Xprob = (logits_data.exp() / logits_data.exp().sum(axes=(1,)).reshape((-1, 1)))
+        Xprob = (logits_data.exp() / logits_data.exp().sum(axes=(1,), keepdims=True).broadcast_to(logits_data.shape))
         Xpred = Xprob.argmax(axis=1)
         error_c = (Xpred != Yb).sum().numpy()
         return error_c

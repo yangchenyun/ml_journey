@@ -471,6 +471,13 @@ def test_train_cifar10(device):
     out = one_iter_of_cifar10_training(dataloader, model, opt=ndl.optim.Adam(model.parameters(), lr=0.001, weight_decay=0.001), device=device)
     assert np.linalg.norm(np.array(list(out)) - np.array([0.09375, 3.5892258])) < 1e-2
 
+@pytest.mark.parametrize("device", _DEVICES)
+def test_error_count(device):
+    from apps.simple_training import error_count
+    logits = ndl.Tensor(np.array([[0.1, 0.2, 0.3], [0.1, 0.2, 0.3]]), device=device)
+    Yb = ndl.Tensor(np.array([2, 1]), device=device)
+    assert error_count(logits, Yb) == 1
+
 
 def one_iter_of_cifar10_training(dataloader, model, niter=1, loss_fn=ndl.nn.SoftmaxLoss(), opt=None, device=None):
     np.random.seed(4)

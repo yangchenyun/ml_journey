@@ -100,11 +100,15 @@ class DataLoader:
         dataset: Dataset,
         batch_size: Optional[int] = 1,
         shuffle: bool = False,
+        device=None,
+        dtype="float32"
     ) -> Tensor :
 
         self.dataset = dataset
         self.shuffle = shuffle
         self.batch_size = batch_size
+        self.device = device
+        self.dtype = dtype
         if not self.shuffle:
             self.ordering = np.array_split(np.arange(len(dataset)), 
                                             range(batch_size, len(dataset), batch_size))
@@ -128,7 +132,7 @@ class DataLoader:
 
         batch_indices = self.batch_ordering[self.batch_index]
         # NOTE: It expects a tensor as returned type
-        batch_data = [Tensor(batch, requires_grad=False) for batch in self.get_batch(batch_indices)]
+        batch_data = [Tensor(batch, requires_grad=False, device=self.device, dtype=self.dtype) for batch in self.get_batch(batch_indices)]
         self.batch_index += 1
         return batch_data
 
