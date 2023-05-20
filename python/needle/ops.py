@@ -612,14 +612,22 @@ class Conv(TensorOp):
         _,Ho,Wo,_ = out_grad.shape
         K,_,_,C_out = W.shape
 
-        # TODO: think about how to 
+        revP = K-1-self.padding
         if self.stride > 1:
             out_grad = dilate(out_grad, (1,2), self.stride - 1)
+            # TODO: Reverse calcuate the expected dimensions
+            H_g = (Hz - 1) + K - 2 * revP
+            W_g = (Wz - 1) + K - 2 * revP
+            assert H_g == out_grad.shape[1]
+            assert W_g == out_grad.shape[2]
+            # slice operator missing
 
         # flip kernel dimensions
         # swap C_in and C_out
+        # out_grad: N,H,W,C_out
+        # dW: K,K,C_in,C_out -> K,K,C_out,C_in
         fW = flip(W, (0, 1))
-        dZ = conv(out_grad, transpose(fW, (2, 3)), padding=K-1-self.padding)
+        dZ = conv(out_grad, transpose(fW, (2, 3)), padding=revP)
         assert dZ.shape == Z.shape
 
         # Z: N,H,W,C_in -> C_in,H,W,N, treating N as input channels
