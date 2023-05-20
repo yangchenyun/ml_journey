@@ -250,6 +250,18 @@ class BroadcastTo(TensorOp):
     def compute(self, a):
         assert len(self.shape) >= len(a.shape), "BroadcastTo should only increase the dimension of the input."
 
+        reshaped_a = array_api.reshape(a, self.intermediate_shape(a))
+        return array_api.broadcast_to(reshaped_a, self.shape)
+
+    def gradient(self, out_grad, node):
+        """The reverse would add up all the gradient associated with the broadcasted gradient."""
+        a = node.inputs[0]
+        axes = tuple([i for i, a in enumerate(self.intermediate_shape(a)) if a == 1])
+        da = summation(out_grad, axes).reshape(a.shape)
+        assert a.shape == da.shape, f"Expect after: {a.shape} === {da.shape}"
+        return da
+
+    def intermediate_shape(self, a):
         # NOTE: Implement numpy broadcast rules
         # - Align on the right-most dimension
         # - Missing dimensions are assumed to be 1
@@ -261,17 +273,8 @@ class BroadcastTo(TensorOp):
                 new_shape[-i] = a.shape[-i]
             else:
                 new_shape[-i] = 1
+        return tuple(new_shape)
 
-        reshaped_a = array_api.reshape(a, tuple(new_shape))
-        return array_api.broadcast_to(reshaped_a, self.shape)
-
-    def gradient(self, out_grad, node):
-        """The reverse would add up all the gradient associated with the broadcasted gradient."""
-        a = node.inputs[0]
-        axes = tuple(i for i, (x, y) in enumerate(zip(a.shape, self.shape)) if x != y)
-        da = summation(out_grad, axes, keepdims=True)
-        assert a.shape == da.shape, f"Expect after: {a.shape} === {da.shape}"
-        return da
 
 def broadcast_to(a, shape):
     return BroadcastTo(shape)(a)
