@@ -135,7 +135,7 @@ class SoftmaxLoss(Module):
         b = logits.shape[0]
         axis = len(logits.shape) - 1 # last dimension as data
         n = logits.shape[axis]
-        H_y = logits * init.one_hot(n, y)  # pluck out the encoding label == y
+        H_y = logits * init.one_hot(n, y, device=y.device)  # pluck out the encoding label == y
         delta = logits.logsumexp(axes=(axis,)) - H_y.sum(axes=(axis,))
         return delta.sum() / b
 

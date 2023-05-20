@@ -394,7 +394,7 @@ class ReLU(TensorOp):
     def gradient(self, out_grad, node):
         a = node.inputs[0]
         # NOTE: Exception to look backward at input
-        mask = a.realize_cached_data() > 0
+        mask = Tensor(a.realize_cached_data() > 0, requires_grad=False, device=out_grad.device)
         return (out_grad * mask,)
 
 def relu(a):
@@ -446,7 +446,7 @@ class LogSumExp(TensorOp):
 
         # NOTE: out_grad also has dimension reduced, here restore it
         # for broadcasting to work properly
-        return out_grad.reshape(self.restore_shape(input)).broadcast_to(gradient.shape) * needle.Tensor(gradient)
+        return out_grad.reshape(self.restore_shape(input)).broadcast_to(gradient.shape) * needle.Tensor(gradient, device=out_grad.device)
 
 def logsumexp(a, axes=None):
     return LogSumExp(axes=axes)(a)
