@@ -232,7 +232,7 @@ class Reshape(TensorOp):
         self.shape = shape
 
     def compute(self, a):
-        return array_api.reshape(a, self.shape)
+        return a.compact().reshape(self.shape)
 
     def gradient(self, out_grad, node):
         a = node.inputs[0]
@@ -425,7 +425,7 @@ class LogSumExp(TensorOp):
     def compute(self, Z):
         maxZ = array_api.max(Z, axis=self.axes)
         new_shape = self.restore_shape(Z)
-        return ((Z - maxZ.reshape(new_shape).broadcast_to(Z.shape))
+        return ((Z - maxZ.compact().reshape(new_shape).broadcast_to(Z.shape))
                 .exp()
                 .sum(axis=self.axes)
                 .log()) + maxZ
