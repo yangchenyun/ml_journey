@@ -47,12 +47,15 @@ CudaDims CudaOneDim(size_t size) {
 CudaDims CudaTwoDim(size_t x_size, size_t y_size) {
   CudaDims dim;
   // xt*yt = α * BASE_THREAD_NUM
-  size_t x_threads =
-      std::min(static_cast<int>(x_size),
-               static_cast<int>(sqrt(BASE_THREAD_NUM * x_size / y_size)));
-  size_t y_threads =
-      std::min(static_cast<int>(y_size),
-               static_cast<int>(sqrt(BASE_THREAD_NUM * y_size / x_size)));
+  size_t x_threads = std::min(x_size, static_cast<size_t>(sqrt(BASE_THREAD_NUM * x_size / y_size)));
+  size_t y_threads = std::min(y_size, static_cast<size_t>(sqrt(BASE_THREAD_NUM * y_size / x_size)));
+
+  // Potential zero if x_size and y_size diverges
+  x_threads = (x_threads == 0) ? 1 : x_threads;
+  y_threads = (y_threads == 0) ? 1 : y_threads;
+  x_threads = (x_threads > BASE_THREAD_NUM) ? BASE_THREAD_NUM : x_threads;
+  y_threads = (y_threads > BASE_THREAD_NUM) ? BASE_THREAD_NUM : y_threads;
+
   size_t x_blocks = (x_size + x_threads - 1) / x_threads;
   size_t y_blocks = (y_size + y_threads - 1) / y_threads;
   dim.block = dim3(x_threads, y_threads, 1);
@@ -63,10 +66,10 @@ CudaDims CudaTwoDim(size_t x_size, size_t y_size) {
 #define MAX_VEC_SIZE 8
 struct CudaVec {
   uint32_t size;
-  uint32_t data[MAX_VEC_SIZE];
+  int32_t data[MAX_VEC_SIZE];  // NOTE: allows negative strides
 };
 
-CudaVec VecToCuda(const std::vector<uint32_t> &x) {
+CudaVec VecToCuda(const std::vector<int32_t> &x) {
   CudaVec shape;
   if (x.size() > MAX_VEC_SIZE)
     throw std::runtime_error("Exceeded CUDA supported max dimesions");
@@ -152,8 +155,8 @@ __global__ void CompactKernel(const scalar_t *a, scalar_t *out, size_t size,
   /// END YOUR SOLUTION
 }
 
-void Compact(const CudaArray &a, CudaArray *out, std::vector<uint32_t> shape,
-             std::vector<uint32_t> strides, size_t offset) {
+void Compact(const CudaArray &a, CudaArray *out, std::vector<int32_t> shape,
+             std::vector<int32_t> strides, size_t offset) {
   /**
    * Compact an array in memory.  Unlike the C++ version, in CUDA this will
    * primarily call the relevant CUDA kernel.  In this case, we illustrate how
@@ -199,7 +202,7 @@ __global__ void EwiseSetitemKernel(const scalar_t *a, scalar_t *out,
 }
 
 void EwiseSetitem(const CudaArray &a, CudaArray *out,
-                  std::vector<uint32_t> shape, std::vector<uint32_t> strides,
+                  std::vector<int32_t> shape, std::vector<int32_t> strides,
                   size_t offset) {
   /**
    * Set items in a (non-compact) array using CUDA.  Yyou will most likely want
@@ -241,7 +244,7 @@ __global__ void ScalarSetitemKernel(const scalar_t val, scalar_t *out,
 }
 
 void ScalarSetitem(size_t size, scalar_t val, CudaArray *out,
-                   std::vector<uint32_t> shape, std::vector<uint32_t> strides,
+                   std::vector<int32_t> shape, std::vector<int32_t> strides,
                    size_t offset) {
   /**
    * Set items is a (non-compact) array
@@ -415,13 +418,16 @@ void Matmul(const CudaArray &a, const CudaArray &b, CudaArray *out, uint32_t M,
    *   P: columns of b / out
    */
   /// BEGIN YOUR SOLUTION
+
   CudaDims dim = CudaTwoDim(M, P);
 
-  printf("dim.grid.x: %d, dim.grid.y: %d, dim.grid.z: %d\n", dim.grid.x,
-         dim.grid.y, dim.grid.z);
-  printf("dim.block.x: %d, dim.block.y: %d, dim.block.z: %d\n", dim.block.x,
-         dim.block.y, dim.block.z);
-  printf("M, N, P: %d, %d, %d\n", M, N, P);
+  #ifndef NDEBUG
+      printf("Matmul: M, N, P: %d, %d, %d\n", M, N, P);
+      printf("dim.grid.x: %d, dim.grid.y: %d, dim.grid.z: %d\n", dim.grid.x,
+          dim.grid.y, dim.grid.z);
+      printf("dim.block.x: %d, dim.block.y: %d, dim.block.z: %d\n", dim.block.x,
+          dim.block.y, dim.block.z);
+  #endif
 
   MatmulKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, M, N, P);
   cudaError_t err = cudaGetLastError();

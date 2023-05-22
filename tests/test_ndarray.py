@@ -17,7 +17,6 @@ def compare_strides(a_np, a_nd):
 def check_same_memory(original, view):
     assert original._handle.ptr() == view._handle.ptr()
 
-
 # TODO test permute, broadcast_to, reshape, getitem, some combinations thereof
 @pytest.mark.parametrize("params", [
     {
@@ -460,6 +459,27 @@ matmul_dims = [
     (64, 64, 64),
     (72, 72, 72), 
     (128, 128, 128),
+
+    # Special cases to test CUDA scheduling with various m/p ratios
+    (10240, 144, 1),
+    (1, 144, 10240),
+
+    (2560, 72, 16), 
+    (160, 72, 16),
+    (2560, 72, 8),
+
+    (588, 18, 14),
+    (18, 588, 14),
+    (507, 25, 16),
+    (147, 18, 14),
+    (867, 1, 16),
+
+    # Failed special cases caught in conv
+    (10240, 144, 8),
+    (2560, 144, 8),
+    (768, 126, 2),
+    (507, 400, 1),
+    (867, 16, 1),
     ]
 @pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
 @pytest.mark.parametrize("m,n,p", matmul_dims)
