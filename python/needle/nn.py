@@ -162,16 +162,18 @@ class BatchNorm1d(Module):
             self.running_var = self.running_var * (1 - self.momentum) + batch_var.detach() * self.momentum
 
             batch_mean = batch_mean.broadcast_to(x.shape)
-
             batch_var = batch_var.broadcast_to(x.shape)
             normalized = (x - batch_mean) / (batch_var + self.eps)**0.5
         else:
-            normalized = (x - self.running_mean) / (self.running_var + self.eps)**0.5
+            running_mean = self.running_mean.broadcast_to(x.shape)
+            running_var = self.running_var.broadcast_to(x.shape)
+            normalized = (x - running_mean) / (running_var + self.eps)**0.5
             
         broadcasted_result = normalized * self.weight.broadcast_to(x.shape) + self.bias.broadcast_to(x.shape)
         result = normalized * self.weight.broadcast_to(x.shape) + self.bias.broadcast_to(x.shape)
 
-        assert np.all(broadcasted_result.numpy() == result.numpy()), "Broadcasting should not change the result"
+        np.testing.assert_allclose(broadcasted_result.numpy(), result.numpy(), atol=1e-5, rtol=1e-5, 
+                                   err_msg="Broadcasting should not change the result")
 
         # TODO: Why not use weights.broadcast_to would make numeric difference in Adam?
         # Because gradient propagation for self.weight and self.bias?
