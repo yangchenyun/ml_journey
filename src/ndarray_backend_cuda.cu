@@ -11,7 +11,7 @@ namespace cuda {
 
 #define BASE_THREAD_NUM 256
 
-#define TILE 4
+#define TILE 32
 typedef float scalar_t;
 const size_t ELEM_SIZE = sizeof(scalar_t);
 
@@ -392,6 +392,56 @@ __global__ void MatmulKernel(const scalar_t *a, const scalar_t *b,
   }
 }
 
+#define TILE_WIDTH TILE
+__global__ void SharedMatmulKernel(const scalar_t *a, const scalar_t *b,
+                                   scalar_t *out, uint32_t M, uint32_t N,
+                                   uint32_t P) {
+  __shared__ float tileMs[TILE_WIDTH][TILE_WIDTH];
+  __shared__ float tileNs[TILE_WIDTH][TILE_WIDTH];
+
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+  int bx = blockIdx.x;
+  int by = blockIdx.y;
+
+  // target element coordinates
+  int row = by * TILE_WIDTH + ty;
+  int column = bx * TILE_WIDTH + tx;
+
+  float pValue = 0;
+
+  // compute target element value
+  for (int i = 0; i < ceilf(N / (float)TILE_WIDTH); i++) {
+    // move the tiles and update shared memory value for new tile positions
+
+    // shared memory for tileNs relates to the columns of the input matrix b which is N, 
+    // and for tileMs it relates to the rows of the input matrix a which is M.
+
+    if (row < M && i * TILE_WIDTH + tx < N)
+      tileMs[ty][tx] = a[row * N + i * TILE_WIDTH + tx];
+    else
+      tileMs[ty][tx] = 0;
+
+    if (column < P && i * TILE_WIDTH + ty < N)
+      tileNs[ty][tx] = b[(i * TILE_WIDTH + ty) * P + column];
+    else
+      tileNs[ty][tx] = 0;
+
+    // after the entire tile's values are available, proceed
+    __syncthreads();
+
+    int bound = min(TILE_WIDTH, N - i * TILE_WIDTH);
+    for (int j = 0; j < bound; j++)
+      pValue += tileMs[ty][j] * tileNs[j][tx];
+    // after the entire tile's values have been used, proceed
+    __syncthreads();
+  }
+  // boundary check
+  if (row < M && column < P) {
+    out[row * P + column] = pValue;
+  }
+}
+
 void Matmul(const CudaArray &a, const CudaArray &b, CudaArray *out, uint32_t M,
             uint32_t N, uint32_t P) {
   /**
@@ -419,17 +469,27 @@ void Matmul(const CudaArray &a, const CudaArray &b, CudaArray *out, uint32_t M,
    */
   /// BEGIN YOUR SOLUTION
 
-  CudaDims dim = CudaTwoDim(M, P);
+  // Setup the execution configuration
 
-  #ifndef NDEBUG
-      printf("Matmul: M, N, P: %d, %d, %d\n", M, N, P);
-      printf("dim.grid.x: %d, dim.grid.y: %d, dim.grid.z: %d\n", dim.grid.x,
-          dim.grid.y, dim.grid.z);
-      printf("dim.block.x: %d, dim.block.y: %d, dim.block.z: %d\n", dim.block.x,
-          dim.block.y, dim.block.z);
-  #endif
+  // CudaDims dim = CudaTwoDim(M, P);
+  // #ifndef NDEBUG
+  //     printf("Matmul: M, N, P: %d, %d, %d\n", M, N, P);
+  //     printf("dim.grid.x: %d, dim.grid.y: %d, dim.grid.z: %d\n", dim.grid.x,
+  //         dim.grid.y, dim.grid.z);
+  //     printf("dim.block.x: %d, dim.block.y: %d, dim.block.z: %d\n", dim.block.x,
+  //         dim.block.y, dim.block.z);
+  // #endif
+  // MatmulKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, M, N, P);
 
-  MatmulKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, M, N, P);
+  // Launch the device computation threads!
+  dim3 gridSize, blockSize;
+  blockSize.x = blockSize.y = TILE;
+  blockSize.z = 1;
+  gridSize.x = ceil(P / (float)blockSize.x);
+  gridSize.y = ceil(M / (float)blockSize.y);
+  gridSize.z = 1;
+
+  SharedMatmulKernel<<<gridSize, blockSize>>>(a.ptr, b.ptr, out->ptr, M, N, P);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     printf("Error: Kernel launch error: %s\n", cudaGetErrorString(err));
