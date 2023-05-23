@@ -67,7 +67,7 @@ def epoch_general_cifar10(dataloader, model, loss_fn=nn.SoftmaxLoss(), opt=None)
 
 
 def train_cifar10(model, dataloader, n_epochs=1, optimizer=ndl.optim.Adam,
-          lr=0.001, weight_decay=0.001, loss_fn=nn.SoftmaxLoss):
+          lr=0.001, weight_decay=0.001, loss_fn=nn.SoftmaxLoss, callback=None):
     """
     Performs {n_epochs} epochs of training.
 
@@ -87,14 +87,11 @@ def train_cifar10(model, dataloader, n_epochs=1, optimizer=ndl.optim.Adam,
     np.random.seed(4)
     ### BEGIN YOUR SOLUTION
     opt = optimizer(model.parameters(), lr=lr, weight_decay=weight_decay)
+    train_error, train_loss = 0.0, 0.0
     for i in range(n_epochs):
         train_error, train_loss = epoch_general_cifar10(dataloader, model, loss_fn, opt)
-        # test_error, test_loss = epoch_general_cifar10(dataloader, model, loss_fn)
-        if i % 1 == 0:
-            print(f"Epoch {i}: train error: {train_error}, train error: {train_error}")
-            # print(f"Epoch {i}: train loss: {train_loss}, test loss: {test_loss}")
-        
-    # return train_error, train_loss, test_error, test_loss
+        if callback:
+            callback(i, model, train_error, train_loss)
     return train_error, train_loss
     ### END YOUR SOLUTION
 
