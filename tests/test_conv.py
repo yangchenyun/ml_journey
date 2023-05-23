@@ -190,6 +190,31 @@ def test_resnet9(device):
          1.8534894 , -0.1867125 , -2.4298222 , -0.5344223 ,  4.362149  ]]) - y.numpy()) < 1e-2
 
 
+@pytest.mark.parametrize("device", _DEVICES)
+def test_pickle(device):
+    def num_params(model):
+        return np.sum([np.prod(x.shape) for x in model.parameters()])
+
+    import pickle
+    from apps.models import ResNet9
+    import tempfile
+
+    np.random.seed(0)
+    model = ResNet9(device=device)
+
+    assert num_params(model) == 431946
+
+    dump_file = tempfile.TemporaryFile()
+    pickle.dump(model, dump_file)
+    dump_file.seek(0)
+    loaded_model = pickle.load(dump_file)
+
+    assert num_params(loaded_model) == 431946
+
+    for p1, p2 in zip(model.parameters(), loaded_model.parameters()):
+        assert np.allclose(p1.numpy(), p2.numpy())
+        assert p1.device == p2.device
+
 
 @pytest.mark.parametrize("device", _DEVICES)
 def test_dilate_forward(device):

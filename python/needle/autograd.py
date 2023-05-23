@@ -11,7 +11,7 @@ from needle import init
 LAZY_MODE = False
 TENSOR_COUNTER = 0
 
-from .backend_selection import Device, array_api, NDArray, default_device
+from .backend_selection import Device, array_api, NDArray, default_device, cuda, cpu_numpy, cpu
 
 # import numpy as array_api
 
@@ -229,6 +229,27 @@ class Tensor(Value):
             cached_data=cached_data,
             requires_grad=requires_grad,
         )
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state['cached_data'] = self.cached_data.numpy()  # assuming cached_data is a Tensor
+        state['device'] = str(self.device)
+        return state
+
+    def __setstate__(self, state):
+        cached_data = state.pop('cached_data')
+        dtype = cached_data.dtype
+        device = state.pop('device')
+
+        if device == 'cpu()':
+            device = cpu()
+        elif device == 'cuda()':
+            device = cuda()
+        elif device == 'cpu_numpy()':
+            device = cpu_numpy()
+            
+        state['cached_data'] = Tensor._array_from_numpy(cached_data, device=device, dtype=dtype)
+        self.__dict__.update(state)
 
     @staticmethod
     def _array_from_numpy(numpy_array, device, dtype):

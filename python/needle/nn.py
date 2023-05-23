@@ -6,6 +6,7 @@ from needle import ops
 import needle.init as init
 import numpy as np
 from functools import reduce
+import pickle
 
 
 class Parameter(Tensor):
@@ -73,6 +74,30 @@ class Module:
 
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
+
+    def __getstate__(self):
+        import types
+        state = self.__dict__.copy()
+        for key, value in state.items():
+            if isinstance(value, Module) or isinstance(value, Parameter):
+                state[key] = pickle.dumps(value)
+            elif isinstance(value, (list, tuple)):
+                state[key] = type(value)(pickle.dumps(v) if isinstance(v, (Module, Parameter)) else v for v in value)
+            elif isinstance(value, dict):
+                state[key] = {k: pickle.dumps(v) if isinstance(v, (Module, Parameter)) else v for k, v in value.items()}
+            elif isinstance(value, types.ModuleType):
+                del state[key]  # Don't try to pickle modules
+        return state
+
+    def __setstate__(self, state):
+        for key, value in state.items():
+            if isinstance(value, (bytes)):
+                state[key] = pickle.loads(value)
+            elif isinstance(value, (list, tuple)):
+                state[key] = type(value)(pickle.loads(v) if isinstance(v, (bytes)) else v for v in value)
+            elif isinstance(value, dict):
+                state[key] = {k: pickle.loads(v) if isinstance(v, (bytes)) else v for k, v in value.items()}
+        self.__dict__.update(state)
 
 
 class Identity(Module):
