@@ -404,6 +404,59 @@ def relu(a):
     return ReLU()(a)
 
 
+class LeakyReLU(TensorOp):
+
+    def __init__(self, alpha=0.01):
+        self.alpha = alpha
+
+    def compute(self, a):
+        return array_api.maximum(a, self.alpha * a)
+
+    def gradient(self, out_grad, node):
+        a = node.inputs[0]
+        mask = Tensor(a.realize_cached_data() > 0, requires_grad=False, device=out_grad.device)
+        return (out_grad * mask + out_grad * (1 - mask) * self.alpha,)
+
+
+def leaky_relu(a, alpha=0.01):
+    return LeakyReLU(alpha)(a)
+
+
+class ELU(TensorOp):
+    def __init__(self, alpha=1.0):
+        self.alpha = alpha
+
+    def compute(self, a):
+        return (array_api.maximum(a, 0) +
+                array_api.minimum(self.alpha * (array_api.exp(a) - 1), 0))
+
+    def gradient(self, out_grad, node):
+        a = node.inputs[0]
+        mask = Tensor(a.realize_cached_data() > 0, requires_grad=False, device=out_grad.device)
+        return (out_grad * mask + out_grad * (1 - mask) * self.alpha * array_api.exp(a),)
+
+def elu(a, alpha=1.0):
+    return ELU(alpha)(a)
+
+
+class SeLU(ELU):
+    def __init__(self, alpha=None, scale=None):
+        alpha = alpha or 1.6732632423543772848170429916717
+        scale = scale or 1.0507009873554804934193349852946
+
+        super().__init__(alpha)
+        self.scale = scale
+
+    def compute(self, a):
+        return self.scale * super().compute(a)
+
+    def gradient(self, out_grad, node):
+        return tuple([self.scale * g for g in super().gradient(out_grad, node)])
+
+
+def selu(a, alpha=None, scale=None):
+    return SeLU(alpha, scale)(a)
+
 class LogSumExp(TensorOp):
     def __init__(self, axes: Optional[tuple] = None):
         self.axes = axes

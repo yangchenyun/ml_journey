@@ -475,6 +475,11 @@ class NDArray:
             other, self.device.ewise_maximum, self.device.scalar_maximum
         )
 
+    def minimum(self, other):
+        return self.ewise_or_scalar(
+            other, self.device.ewise_minimum, self.device.scalar_minimum
+        )
+
     ### Binary operators all return (0.0, 1.0) floating point values, could of course be optimized
     def __eq__(self, other):
         return self.ewise_or_scalar(other, self.device.ewise_eq, self.device.scalar_eq)
@@ -673,6 +678,9 @@ def reshape(array, new_shape):
 
 def maximum(a, b):
     return a.maximum(b)
+
+def minimum(a, b):
+    return a.minimum(b)
 
 def log(a):
     return a.log()

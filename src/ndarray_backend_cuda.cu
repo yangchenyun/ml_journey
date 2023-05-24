@@ -361,12 +361,26 @@ void EwiseMaximum(const CudaArray &a, const CudaArray &b, CudaArray *out) {
                                               out->size);
 }
 
+__global__ void EwiseMinimumKernel(const scalar_t *a, const scalar_t *b,
+                                   scalar_t *out, size_t size) {
+  size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (gid < size)
+    out[gid] = min(a[gid], b[gid]);
+};
+
+void EwiseMinimum(const CudaArray &a, const CudaArray &b, CudaArray *out) {
+  CudaDims dim = CudaOneDim(out->size);
+  EwiseMinimumKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr,
+                                              out->size);
+}
+
 SCALAR_BINARY_OP(Add, +)
 SCALAR_BINARY_OP(Mul, *)
 SCALAR_BINARY_OP(Div, /)
 SCALAR_BINARY_OP(Eq, ==)
 SCALAR_BINARY_OP(Ge, >=)
 SCALAR_BINARY_OP_FN(Maximum, max)
+SCALAR_BINARY_OP_FN(Minimum, min)
 SCALAR_BINARY_OP_FN(Power, pow)
 /// END YOUR SOLUTION
 
@@ -627,6 +641,8 @@ PYBIND11_MODULE(ndarray_backend_cuda, m) {
 
   m.def("ewise_maximum", EwiseMaximum);
   m.def("scalar_maximum", ScalarMaximum);
+  m.def("ewise_minimum", EwiseMinimum);
+  m.def("scalar_minimum", ScalarMinimum);
   m.def("ewise_eq", EwiseEq);
   m.def("scalar_eq", ScalarEq);
   m.def("ewise_ge", EwiseGe);

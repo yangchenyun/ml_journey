@@ -141,6 +141,53 @@ def test_tanh_backward(shape, device):
     A = ndl.Tensor(nd.array(_A), device=device)
     backward_check(ndl.tanh, A)
 
+@pytest.mark.parametrize("shape", GENERAL_SHAPES)
+@pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
+def test_selu(shape, device):
+    _A = np.random.randn(*shape).astype(np.float32)
+    A = ndl.Tensor(nd.array(_A), device=device)
+    At = torch.Tensor(_A)
+    selu = torch.nn.SELU()
+    np.testing.assert_allclose(selu(At), ndl.selu(A).numpy(), atol=1e-5, rtol=1e-5)
+
+@pytest.mark.parametrize("shape", GENERAL_SHAPES)
+@pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
+def test_selu_backward(shape, device):
+    _A = np.random.randn(*shape).astype(np.float32)
+    A = ndl.Tensor(nd.array(_A), device=device)
+    backward_check(ndl.selu, A)
+
+@pytest.mark.parametrize("shape", GENERAL_SHAPES)
+@pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
+def test_elu(shape, device):
+    _A = np.random.randn(*shape).astype(np.float32)
+    A = ndl.Tensor(nd.array(_A), device=device)
+    At = torch.Tensor(_A)
+    elu = torch.nn.ELU()
+    np.testing.assert_allclose(elu(At), ndl.elu(A).numpy(), atol=1e-5, rtol=1e-5)
+
+@pytest.mark.parametrize("shape", GENERAL_SHAPES)
+@pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
+def test_elu_backward(shape, device):
+    _A = np.random.randn(*shape).astype(np.float32)
+    A = ndl.Tensor(nd.array(_A), device=device)
+    backward_check(ndl.elu, A)
+
+@pytest.mark.parametrize("shape", GENERAL_SHAPES)
+@pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
+def test_leaky_relu(shape, device):
+    _A = np.random.randn(*shape).astype(np.float32)
+    A = ndl.Tensor(nd.array(_A), device=device)
+    At = torch.Tensor(_A)
+    l_relu = torch.nn.LeakyReLU()
+    np.testing.assert_allclose(l_relu(At), ndl.leaky_relu(A).numpy(), atol=1e-5, rtol=1e-5)
+
+@pytest.mark.parametrize("shape", GENERAL_SHAPES)
+@pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
+def test_leaky_relu_backward(shape, device):
+    _A = np.random.randn(*shape).astype(np.float32)
+    A = ndl.Tensor(nd.array(_A), device=device)
+    backward_check(ndl.leaky_relu, A)
 
 STACK_PARAMETERS = [
     ((5, 5), 0, 1),

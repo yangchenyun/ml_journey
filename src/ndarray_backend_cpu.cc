@@ -235,6 +235,11 @@ void ScalarMaximum(const AlignedArray &a, scalar_t val, AlignedArray *out) {
     out->ptr[i] = std::max(a.ptr[i], val);
   }
 }
+void ScalarMinimum(const AlignedArray &a, scalar_t val, AlignedArray *out) {
+  for (size_t i = 0; i < a.size; i++) {
+    out->ptr[i] = std::min(a.ptr[i], val);
+  }
+}
 void ScalarPower(const AlignedArray &a, scalar_t val, AlignedArray *out) {
   for (size_t i = 0; i < a.size; i++) {
     out->ptr[i] = pow(a.ptr[i], val);
@@ -252,6 +257,12 @@ void EwiseMaximum(const AlignedArray &a, const AlignedArray &o,
                   AlignedArray *out) {
   for (size_t i = 0; i < a.size; i++) {
     out->ptr[i] = std::max(a.ptr[i], o.ptr[i]);
+  }
+}
+void EwiseMinimum(const AlignedArray &a, const AlignedArray &o,
+                  AlignedArray *out) {
+  for (size_t i = 0; i < a.size; i++) {
+    out->ptr[i] = std::min(a.ptr[i], o.ptr[i]);
   }
 }
 
@@ -454,6 +465,8 @@ PYBIND11_MODULE(ndarray_backend_cpu, m) {
 
   m.def("ewise_maximum", EwiseMaximum);
   m.def("scalar_maximum", ScalarMaximum);
+  m.def("ewise_minimum", EwiseMinimum);
+  m.def("scalar_minimum", ScalarMinimum);
   m.def("ewise_eq", EwiseEq);
   m.def("scalar_eq", ScalarEq);
   m.def("ewise_ge", EwiseGe);
