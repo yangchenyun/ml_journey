@@ -320,12 +320,20 @@ def read_cifar_10(batch_files):
     return X / 255.0, y
 
 
+def read_cifar_10_meta(batch_meta):
+    """Read cifar10 files from base_folder, and return arrays of images and labels.
+    """
+    data = unpickle(batch_meta)
+    return data[b'label_names']
+
+
 class CIFAR10Dataset(Dataset):
     def __init__(
         self,
         base_folder: str,
         train: bool,
         p: Optional[int] = 0.5,
+        normalized: bool = False,
         transforms: Optional[List] = None
     ):
         """
@@ -343,12 +351,23 @@ class CIFAR10Dataset(Dataset):
         assert len(self.X) == len(self.Y), "Number of images and labels must match"
         assert (self.X >= 0.0).all() and (self.X <= 1.0).all(), "All entries of self.X must be between 0.0 and 1.0"
 
+        self.normalized = normalized
+        self.X_mean = np.mean(self.X, axis=(0, 2, 3)).reshape(-1, 3, 1, 1)
+        self.X_std = np.std(self.X, axis=(0, 2, 3)).reshape(-1, 3, 1, 1)
+
+    def normalize(self, x):
+        return (x - self.X_mean) / self.X_std
+
     def __getitem__(self, index) -> object:
         """
         Returns the image, label at given index
         Image should be of shape (3, 32, 32)
         """
-        return self.X[index], self.Y[index]
+        x = self.X[index]
+        if self.normalized: 
+            x = self.normalize(x)
+        y = self.Y[index]
+        return self.apply_transforms(x), y
 
     def __len__(self) -> int:
         """
