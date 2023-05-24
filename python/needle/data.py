@@ -2,11 +2,12 @@ import numpy as np
 from .autograd import Tensor
 import os
 import pickle
-from typing import Iterator, Optional, List, Sized, Union, Iterable, Any
+from typing import Iterator, Optional, List, Sized, Union, Iterable, Any, Tuple
 from needle import backend_ndarray as nd
 
 import gzip
 import struct
+from scipy.ndimage import zoom
 
 
 class Transform:
@@ -55,6 +56,43 @@ class RandomCrop(Transform):
             :]
         assert img_padded.shape == (h, w, c), "Padding should preserve the shape"
         return img_padded
+
+class RandomScale:
+    def __init__(self, scale_range: Tuple[float, float] = (0.8, 1.2)):
+        self.scale_range = scale_range
+
+    def __call__(self, img: np.ndarray) -> np.ndarray:
+        """
+        Randomly scale an image preserving the original shape.
+
+        Args:
+            img (np.ndarray): Original image in the shape (C, H, W).
+
+        Returns:
+            np.ndarray: Scaled image in the shape (C, H, W).
+        """
+        scale_factor = np.random.uniform(low=self.scale_range[0], high=self.scale_range[1])
+        c, h, w = img.shape  # Fix this line
+
+        # Use scipy's zoom function for resizing
+        img_resized = zoom(img, (1, scale_factor, scale_factor))
+
+        new_c, new_h, new_w = img_resized.shape  # Fix this line
+
+        # If the scale factor is less than 1, we need to pad the image
+        if scale_factor < 1:
+            pad_h = (h - new_h) // 2
+            pad_w = (w - new_w) // 2
+            img_padded = np.pad(img_resized, ((0, 0), (pad_h, h - new_h - pad_h), (pad_w, w - new_w - pad_w)), mode='constant')
+        # If the scale factor is greater than 1, we need to crop the image
+        else:
+            crop_h = (new_h - h) // 2
+            crop_w = (new_w - w) // 2
+            img_padded = img_resized[:, crop_h:crop_h+h, crop_w:crop_w+w]
+
+        assert img_padded.shape == img.shape, "Scaling should preserve the original shape"
+        return img_padded
+
 
 class Dataset:
     r"""An abstract class representing a `Dataset`.
