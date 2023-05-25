@@ -69,6 +69,7 @@ class ResNet9(nn.Module):
             c = [c, 2*c, 4*c, 4*c]
 
         self.prep = prep_block(3, c[0], **kw)
+
         self.layer1 = nn.Sequential(
             res_block(c[0], c[0], stride=1, **kw),
             res_block(c[0], c[0], stride=1, **kw),
@@ -214,81 +215,40 @@ def log_progress(i, freq, lr, train_acc, train_loss, test_acc, test_loss, train_
             'test_elapsed_time': test_elapsed_time,
         })
 
-def run_baseline_experiment(exp_name, model, train_dataloader, test_dataloader):
+def run_baseline_experiment(exp_name, model, trainset, testset, cfg):
     def callback(epoch, *args):
         log_progress(epoch, cfg["log_freq"], *args)
 
-    cfg = {
-        "batch_size": 128,
-        "n_epochs": 35,
-        "log_freq": 1,
-        "optimizer": "SGD",
-        # "weight_decay": 5e-4*128,  # 5e-4 * batch_size 
-        "weight_decay": 0.001,
-        "lr": 0.001,
-        "momentum": 0.9,
-    }
+    run = wandb.init(project=exp_name, config=cfg, group='SGD', tags=['prep-1'])
+
+    cfg.update({
+        "batch_size": wandb.config.batch_size,
+        "lr": wandb.config.lr,
+        "weight_decay": wandb.config.weight_decay,
+    })
+
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=cfg["batch_size"],
+                                              shuffle=True, num_workers=4)
+    testloader = torch.utils.data.DataLoader(testset, batch_size=cfg["batch_size"],
+                                            shuffle=False, num_workers=4)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    run = wandb.init(project=exp_name, config=cfg)
     opt = torch.optim.SGD(model.parameters(),
                           lr=cfg["lr"],
                           weight_decay=cfg["weight_decay"],
                           momentum=cfg["momentum"])
 
     # Baseline 1 with a manual learning rate schedule
-    scheduler1 = LinearLR(opt, start_factor=1, end_factor=7.5, total_iters=15)
-    scheduler2 = LinearLR(opt, start_factor=7.5, end_factor=5, total_iters=15)
-    scheduler3 = LinearLR(opt, start_factor=5.0, end_factor=1, total_iters=5)
+    scheduler1 = LinearLR(opt, start_factor=0.001, end_factor=0.075, total_iters=10)
+    scheduler2 = LinearLR(opt, start_factor=0.075, end_factor=0.005, total_iters=20)
     scheduler = SequentialLR(opt, schedulers=[
-        scheduler1, scheduler2, scheduler3], milestones=[15, 30])
+        scheduler1, scheduler2], milestones=[10, 30])
 
     train_cifar10(
         model,
-        train_dataloader,
-        test_dataloader,
-        device=device,
-        n_epochs=cfg["n_epochs"],
-        optimizer=opt,
-        scheduler=scheduler,
-        callback=callback,
-    )
-    wandb.finish()
-
-def run_adam_experiment(exp_name, model, train_dataloader, test_dataloader):
-    def callback(epoch, *args):
-        log_progress(epoch, cfg["log_freq"], *args)
-
-    cfg = {
-        "batch_size": 128,
-        "n_epochs": 35,
-        "log_freq": 1,
-        "optimizer": "Adam",
-        # "weight_decay": 5e-4*128,  # 5e-4 * batch_size 
-        "weight_decay": 0.001,
-        "lr": 0.001,
-        "momentum": 0.9,
-    }
-
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-    run = wandb.init(project=exp_name, config=cfg, group='Adam', tags=[])
-    opt = torch.optim.Adam(model.parameters(),
-                          lr=cfg["lr"],
-                          weight_decay=cfg["weight_decay"])
-
-    # Baseline 1 with a manual learning rate schedule
-    scheduler1 = LinearLR(opt, start_factor=1, end_factor=7.5, total_iters=15)
-    scheduler2 = LinearLR(opt, start_factor=7.5, end_factor=5, total_iters=15)
-    scheduler3 = LinearLR(opt, start_factor=5.0, end_factor=1, total_iters=5)
-    scheduler = SequentialLR(opt, schedulers=[
-        scheduler1, scheduler2, scheduler3], milestones=[15, 30])
-
-    train_cifar10(
-        model,
-        train_dataloader,
-        test_dataloader,
+        trainloader,
+        testloader,
         device=device,
         n_epochs=cfg["n_epochs"],
         optimizer=opt,
@@ -302,7 +262,7 @@ if __name__ == "__main__":
     # %%
     # Convenient transform to normalize the image data
     base_cfg = {
-        "batch_size": 128,
+        "batch_size": 512,
         "n_epochs": 35,
         "log_freq": 1,
         "optimizer": "SGD",
@@ -324,8 +284,6 @@ if __name__ == "__main__":
         ])
     trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                             download=True, transform=train_transform)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=base_cfg["batch_size"],
-                                              shuffle=True, num_workers=torch.get_num_threads())
     test_transform = transforms.Compose(
         [transforms.ToTensor(),
          # values specific for CIFAR10
@@ -334,12 +292,30 @@ if __name__ == "__main__":
          ])
     testset = torchvision.datasets.CIFAR10(root='./data', train=False,
                                            download=True, transform=test_transform)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=base_cfg["batch_size"],
-                                            shuffle=False, num_workers=torch.get_num_threads())
     classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
     # %%
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = ResNet9(10, device=device)
 
-    run_adam_experiment("resnet9", model, trainloader, testloader)
+    sweep_configuration = {
+        'method': 'random',
+        'name': 'sweep',
+        'metric': {'goal': 'maximize', 'name': 'test_acc'},
+        'parameters': 
+        {
+            'batch_size': {'values': [512]},
+            'lr': {'max': 4.0, 'min': 0.5},
+            # 'weight_decay': {'max': 0.01, 'min': 0.001},
+        }
+    }
+
+    sweep_id = wandb.sweep(
+        sweep=sweep_configuration,
+        project='resnet9'
+    )
+    cfg = base_cfg.copy()
+    def launch_sweep():
+        model = ResNet9(10, device=device)
+        run_baseline_experiment("resnet9", model, trainset, testset, cfg)
+
+    wandb.agent(sweep_id, launch_sweep, count=16)
