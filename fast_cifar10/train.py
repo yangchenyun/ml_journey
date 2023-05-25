@@ -229,7 +229,7 @@ def run_baseline_experiment(exp_name, model, train_dataloader, test_dataloader):
         "optimizer": "SGD",
         # "weight_decay": 5e-4*128,  # 5e-4 * batch_size 
         "weight_decay": 0.001,
-        "lr": 1,
+        "lr": 0.001,
         "momentum": 0.9,
     }
 
@@ -242,9 +242,50 @@ def run_baseline_experiment(exp_name, model, train_dataloader, test_dataloader):
                           momentum=cfg["momentum"])
 
     # Baseline 1 with a manual learning rate schedule
-    scheduler1 = LinearLR(opt, start_factor=0.001, end_factor=0.075, total_iters=15)
-    scheduler2 = LinearLR(opt, start_factor=0.075, end_factor=0.005, total_iters=15)
-    scheduler3 = LinearLR(opt, start_factor=0.005, end_factor=0.001, total_iters=5)
+    scheduler1 = LinearLR(opt, start_factor=1, end_factor=7.5, total_iters=15)
+    scheduler2 = LinearLR(opt, start_factor=7.5, end_factor=5, total_iters=15)
+    scheduler3 = LinearLR(opt, start_factor=5.0, end_factor=1, total_iters=5)
+    scheduler = SequentialLR(opt, schedulers=[
+        scheduler1, scheduler2, scheduler3], milestones=[15, 30])
+
+    train_cifar10(
+        model,
+        train_dataloader,
+        test_dataloader,
+        device=device,
+        n_epochs=cfg["n_epochs"],
+        optimizer=opt,
+        scheduler=scheduler,
+        callback=callback,
+    )
+    wandb.finish()
+
+def run_adam_experiment(exp_name, model, train_dataloader, test_dataloader):
+    def callback(epoch, *args):
+        log_progress(epoch, cfg["log_freq"], *args)
+
+    cfg = {
+        "batch_size": 128,
+        "n_epochs": 35,
+        "log_freq": 1,
+        "optimizer": "Adam",
+        # "weight_decay": 5e-4*128,  # 5e-4 * batch_size 
+        "weight_decay": 0.001,
+        "lr": 0.001,
+        "momentum": 0.9,
+    }
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    run = wandb.init(project=exp_name, config=cfg, group='Adam', tags=[])
+    opt = torch.optim.Adam(model.parameters(),
+                          lr=cfg["lr"],
+                          weight_decay=cfg["weight_decay"])
+
+    # Baseline 1 with a manual learning rate schedule
+    scheduler1 = LinearLR(opt, start_factor=1, end_factor=7.5, total_iters=15)
+    scheduler2 = LinearLR(opt, start_factor=7.5, end_factor=5, total_iters=15)
+    scheduler3 = LinearLR(opt, start_factor=5.0, end_factor=1, total_iters=5)
     scheduler = SequentialLR(opt, schedulers=[
         scheduler1, scheduler2, scheduler3], milestones=[15, 30])
 
@@ -288,8 +329,7 @@ if __name__ == "__main__":
     trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                             download=True, transform=train_transform)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=base_cfg["batch_size"],
-                                              shuffle=True, num_workers=2)
-                                                            # num_workers=torch.get_num_threads()
+                                              shuffle=True, num_workers=torch.get_num_threads())
     test_transform = transforms.Compose(
         [transforms.ToTensor(),
          # values specific for CIFAR10
@@ -299,10 +339,11 @@ if __name__ == "__main__":
     testset = torchvision.datasets.CIFAR10(root='./data', train=False,
                                            download=True, transform=test_transform)
     testloader = torch.utils.data.DataLoader(testset, batch_size=base_cfg["batch_size"],
-                                             shuffle=False, num_workers=2)
+                                            shuffle=False, num_workers=torch.get_num_threads())
     classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
     # %%
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = ResNet9(10, device=device)
-    run_baseline_experiment("resnet9", model, trainloader, testloader)
+
+    run_adam_experiment("resnet9", model, trainloader, testloader)
