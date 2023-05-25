@@ -8,6 +8,7 @@ import torchvision
 from torchvision import transforms
 import torch.optim
 from torch.optim.lr_scheduler import LinearLR, SequentialLR
+from torch.profiler import profile, record_function, ProfilerActivity
 
 import wandb
 
@@ -313,9 +314,34 @@ if __name__ == "__main__":
         sweep=sweep_configuration,
         project='resnet9'
     )
+
     cfg = base_cfg.copy()
     def launch_sweep():
         model = ResNet9(10, device=device)
         run_baseline_experiment("resnet9", model, trainset, testset, cfg)
 
-    wandb.agent(sweep_id, launch_sweep, count=16)
+    wandb.agent(sweep_id, launch_sweep, count=4)
+
+    # %% Profile run
+    # cfg = base_cfg.copy()
+    # cfg.update({
+    #     'batch_size': 128,
+    #     'n_epochs': 1,
+    # })
+    # input = torch.randn(cfg['batch_size'], 3, 32, 32).to(device)
+    # model = ResNet9(10, device=device)
+
+    # with profile(activities=[
+    #         ProfilerActivity.CUDA],
+    #              record_shapes=True,
+    #              with_modules=True,
+    #              with_flops=True,
+    #              ) as prof:
+    #     with record_function("model_inference"):
+    #         for i in range(cfg['n_epochs']):
+    #             run_baseline_experiment("resnet9", model, trainset, testset, cfg)
+
+#%%
+# print(prof.key_averages(group_by_input_shape=True).table(sort_by="cuda_time_total", row_limit=10))
+# print(prof.key_averages(group_by_input_shape=True).table(sort_by="cpu_time_total", row_limit=5))
+# %%
