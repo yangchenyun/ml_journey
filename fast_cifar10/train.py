@@ -2,11 +2,11 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from functools import partial
+import time
 
 import torchvision
 from torchvision import transforms
-import torch.optim as optim
+import torch.optim
 from torch.optim.lr_scheduler import LinearLR, SequentialLR
 
 import wandb
@@ -178,47 +178,73 @@ def train_cifar10(
     criterion = nn.CrossEntropyLoss()
 
     for epoch in range(n_epochs):
+        epoch_start_time = time.time()
         train_loss, train_acc = train_epoch(model, train_dataloader, criterion, optimizer, device)
+        train_finished = time.time()
         test_loss, test_acc = eval_epoch(model, test_dataloader, criterion, device)
-        if callback is not None:
-            callback(epoch, train_acc, train_loss, test_acc, test_loss)
+        test_finished  = time.time()
+
+        train_elapsed_time = train_finished - epoch_start_time  # train time
+        test_elapsed_time = test_finished - train_finished
+
+        lr = optimizer.param_groups[0]['lr']
+
         if scheduler:
             scheduler.step()
+            lr = scheduler.get_last_lr()[0]
+
+        if callback is not None:
+            callback(epoch, lr, train_acc, train_loss, test_acc, test_loss, train_elapsed_time, test_elapsed_time)
+
 
 def generate_options(grid):
     keys, values = zip(*grid.items())
     options = [dict(zip(keys, v)) for v in product(*values)]
     return options
 
-def log_progress(i, freq, train_acc, train_loss, test_acc, test_loss):
+def log_progress(i, freq, lr, train_acc, train_loss, test_acc, test_loss, train_elapsed_time, test_elapsed_time):
     if i % freq == 0:
         logger.info(f"Epoch {i}: train acc: {train_acc}, train loss: {train_loss}")
         logger.info(f"Epoch {i}: test acc: {test_acc}, test loss: {test_loss}")
+        logger.info(f"Epoch {i}: train time: {train_elapsed_time:.2f}, test time: {test_elapsed_time:.2f}")
+        logger.info(f"Epoch {i}: lr: {lr:.6f}")
         wandb.log({
             'epoch': i,
             'train_acc': train_acc,
             'train_loss': train_loss,
+            'train_elapsed_time': train_elapsed_time,
             'test_acc': test_acc,
-            'test_loss': test_loss
+            'test_loss': test_loss,
+            'test_elapsed_time': test_elapsed_time,
         })
 
-def run_experiment_with(exp_name, model, train_dataloader, test_dataloader, cfg):
-    def callback(epoch, train_acc, train_loss, test_acc, test_loss):
-        log_progress(epoch, cfg["log_freq"], train_acc, train_loss, test_acc, test_loss)
+def run_baseline_experiment(exp_name, model, train_dataloader, test_dataloader):
+    def callback(epoch, *args):
+        log_progress(epoch, cfg["log_freq"], *args)
+
+    cfg = {
+        "batch_size": 128,
+        "n_epochs": 35,
+        "log_freq": 1,
+        "optimizer": "SGD",
+        # "weight_decay": 5e-4*128,  # 5e-4 * batch_size 
+        "weight_decay": 0.001,
+        "lr": 1,
+        "momentum": 0.9,
+    }
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     run = wandb.init(project=exp_name, config=cfg)
-    optimizer_cls = torch.optim.__dict__[cfg["optimizer"]]
-    opt = optimizer_cls(model.parameters(), 
-                              lr=cfg["lr"], 
-                              weight_decay=cfg["weight_decay"],
-                              momentum=cfg["momentum"])
+    opt = torch.optim.SGD(model.parameters(),
+                          lr=cfg["lr"],
+                          weight_decay=cfg["weight_decay"],
+                          momentum=cfg["momentum"])
 
     # Baseline 1 with a manual learning rate schedule
-    scheduler1 = LinearLR(opt, start_factor=0.01, end_factor=0.1, total_iters=15)
-    scheduler2 = LinearLR(opt, start_factor=0.1, end_factor=0.01, total_iters=15)
-    scheduler3 = LinearLR(opt, start_factor=0.01, end_factor=0.001, total_iters=5)
+    scheduler1 = LinearLR(opt, start_factor=0.001, end_factor=0.075, total_iters=15)
+    scheduler2 = LinearLR(opt, start_factor=0.075, end_factor=0.005, total_iters=15)
+    scheduler3 = LinearLR(opt, start_factor=0.005, end_factor=0.001, total_iters=5)
     scheduler = SequentialLR(opt, schedulers=[
         scheduler1, scheduler2, scheduler3], milestones=[15, 30])
 
@@ -244,25 +270,32 @@ if __name__ == "__main__":
         "log_freq": 1,
         "optimizer": "SGD",
         "weight_decay": 0.001,
-        "lr": 0.01,
+        "lr": 1,
         "momentum": 0.9,
     }
 
     train_transform = transforms.Compose(
         [
-            transforms.ColorJitter(contrast=0.5),
-            # transforms.RandomResize(min_size=24, max_size=40),
-            transforms.RandomRotation(30),
+            # transforms.ColorJitter(contrast=0.5),
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            # transforms.RandomRotation(30),
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+            # values specific for CIFAR10
+            transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                 (0.2023, 0.1994, 0.2010)),
+        ])
     trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                             download=True, transform=train_transform)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=base_cfg["batch_size"],
                                               shuffle=True, num_workers=2)
-
+                                                            # num_workers=torch.get_num_threads()
     test_transform = transforms.Compose(
         [transforms.ToTensor(),
-         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+         # values specific for CIFAR10
+         transforms.Normalize((0.4914, 0.4822, 0.4465),
+                              (0.2023, 0.1994, 0.2010)),
+         ])
     testset = torchvision.datasets.CIFAR10(root='./data', train=False,
                                            download=True, transform=test_transform)
     testloader = torch.utils.data.DataLoader(testset, batch_size=base_cfg["batch_size"],
@@ -272,5 +305,4 @@ if __name__ == "__main__":
     # %%
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = ResNet9(10, device=device)
-    cfg = base_cfg.copy()
-    run_experiment_with("resnet9", model, trainloader, testloader, cfg)
+    run_baseline_experiment("resnet9", model, trainloader, testloader)
