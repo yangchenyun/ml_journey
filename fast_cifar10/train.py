@@ -36,11 +36,7 @@ class Add(nn.Module):
         return self.fn1(x) + self.fn2(x)
 
 def prep_block(c_in, c_out, **kw):
-    return nn.Sequential(
-        nn.Conv2d(in_channels=c_in, out_channels=c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw),
-        nn.BatchNorm2d(num_features=c_out, **kw),
-        nn.ReLU(),
-    )
+    return nn.Conv2d(in_channels=c_in, out_channels=c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw)
 
 def res_block(c_in, c_out, stride, **kw):
     branch = nn.Sequential(
