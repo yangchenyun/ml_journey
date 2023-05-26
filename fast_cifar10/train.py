@@ -4,6 +4,7 @@ import torch.nn as nn
 import numpy as np
 import time
 from collections import OrderedDict
+import itertools
 
 import torchvision
 from torchvision import transforms
@@ -83,47 +84,43 @@ def shortcut_block(c_in, c_out, stride, **kw):
             ('conv3', nn.Conv2d(c_in, c_out, kernel_size=3, stride=stride, padding=1, bias=False, **kw)))
     return nn.Sequential(OrderedDict(blocks))
 
-def maxpool_block(c_in, c_out, stride, **kw):
-    ignored = stride
-    stride = 1
-    projection = (c_in != c_out)    
-    if projection:
-        blocks = [
-            ('conv1', nn.Conv2d(c_in, c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw)),
-            ('bn1', nn.BatchNorm2d(c_out, **kw)),
-            ('relu1', nn.ReLU()),
-            ('maxpool1', nn.MaxPool2d(2))
-        ]
-        return nn.Sequential(OrderedDict(blocks))
-    else:
-        return nn.Identity()
+def maxpool_block(c_in, c_out, extra_conv=False, extra_res=False, **kw):
+    blocks = [
+        ('conv1', nn.Conv2d(c_in, c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw)),
+        ('bn1', nn.BatchNorm2d(c_out, **kw)),
+        ('relu1', nn.ReLU()),
+        ('maxpool1', nn.MaxPool2d(2))
+    ]
+    return nn.Sequential(OrderedDict(blocks))
 
 class ResNet9(nn.Module):
-    def __init__(self, num_classes, block, c=64, **kw):
+    def __init__(self, num_classes, block, c=64, arch_extra_convs=(), arch_extra_residuals=(), **kw):
         super(ResNet9, self).__init__()
         if isinstance(c, int):
             c = [c, 2*c, 4*c, 4*c]
 
         self.prep = prep_block(3, c[0], prep_bn_relu=True, **kw)
 
-        self.layer1 = nn.Sequential(
-            block(c[0], c[0], stride=1, **kw),
-            block(c[0], c[0], stride=1, **kw),
-        )
         # H,W: 32 -> 16, as strides
-        self.layer2 = nn.Sequential(
-            block(c[0], c[1], stride=2, **kw),
-            block(c[1], c[1], stride=1, **kw),
+        self.layer1 = nn.Sequential(
+            block(c[0], c[1], 
+                  extra_conv = (1 in arch_extra_convs), 
+                  extra_res = (1 in arch_extra_residuals),
+                  **kw),
         )
         # H,W: 16 -> 8
-        self.layer3 = nn.Sequential(
-            block(c[1], c[2], stride=2, **kw),
-            block(c[2], c[2], stride=1, **kw),
+        self.layer2 = nn.Sequential(
+            block(c[1], c[2], 
+                  extra_conv = (2 in arch_extra_convs), 
+                  extra_res = (2 in arch_extra_residuals),
+                  **kw),
         )
         # H,W: 8 -> 4
-        self.layer4 = nn.Sequential(
-            block(c[2], c[3], stride=2, **kw),
-            block(c[3], c[3], stride=1, **kw),
+        self.layer3 = nn.Sequential(
+            block(c[2], c[3], 
+                  extra_conv = (3 in arch_extra_convs), 
+                  extra_res = (3 in arch_extra_residuals),
+                  **kw),
         )
         # H,W: 4 -> 1
         self.pool = nn.MaxPool2d(kernel_size=4)
@@ -137,7 +134,6 @@ class ResNet9(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x = self.layer4(x)
         x = self.pool(x)
         x = self.fc(x)
         return x
@@ -263,7 +259,7 @@ def chained_lr_schedule(opt, schedules):
     scheduler = SequentialLR(opt, schedulers=schedulers, milestones=milestones[:-1])
     return scheduler, milestones[-1]
 
-def run_baseline_experiment(exp_name, model, trainset, testset, cfg):
+def run_baseline_experiment(exp_name, trainset, testset, cfg):
     def callback(epoch, *args):
         log_progress(epoch, cfg["log_freq"], *args)
 
@@ -279,9 +275,24 @@ def run_baseline_experiment(exp_name, model, trainset, testset, cfg):
             "lr": wandb.config.lr,
             "weight_decay": wandb.config.weight_decay,
             "lr_schedules": wandb.config.lr_schedules,
+            "arch_extra_convs": wandb.config.arch_extra_convs,
+            "arch_extra_residuals": wandb.config.arch_extra_residuals,
         })
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    if cfg["float16"]:
+        dtype = torch.float16
+    else:
+        dtype = torch.float32
+
+    model = ResNet9(10, 
+                    c=cfg["arch_c"],
+                    block=maxpool_block,
+                    arch_extra_convs=cfg["arch_extra_convs"],
+                    arch_extra_residuals=cfg["arch_extra_residuals"],
+                    device=device, 
+                    dtype=dtype)
 
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=cfg["batch_size"],
                                               shuffle=True, 
@@ -329,6 +340,9 @@ if __name__ == "__main__":
         "float16": True,
         "sweep": True,
         "tags": ["backbone"],
+        "arch_c": [64, 128, 256, 512],
+        "arch_extra_convs": (),
+        "arch_extra_residuals": (),
     }
 
     train_transforms = [
@@ -359,48 +373,44 @@ if __name__ == "__main__":
 
     # Single run
     cfg = base_cfg.copy()
-    if cfg['float16']:
-        c = [64, 128, 256, 512]
-        model = ResNet9(10, c=c, device=device, block=maxpool_block, dtype=torch.float16)
-
-    # else:
-    #     model = ResNet9(10, device=device, block=maxpool_block, dtype=torch.float32)
-        
     try:
-        run_baseline_experiment("resnet9", model, trainset, testset, cfg)
+        run_baseline_experiment("resnet9", trainset, testset, cfg)
     except:
         import pdb; pdb.post_mortem()
+    exit(0)
 
     # # Sweep run
-    # sweep_configuration = {
-    #     'method': 'random',
-    #     'name': 'lr_schedules_sweep',
-    #     'metric': {'goal': 'maximize', 'name': 'test_acc'},
-    #     'parameters': 
-    #     {
-    #         "lr_schedules": {'values': [
-    #             [
-    #                 (1e-3, 0.075, 8),
-    #                 (0.075, 0.001, 22),
-    #             ],
-    #         ]},
-    #     }
-    # }
+    def generate_subsets(sequence):
+        subsets = []
+        for length in range(len(sequence) + 1):
+            subsets.extend(itertools.combinations(sequence, length))
+        return subsets
 
-    # sweep_id = wandb.sweep(
-    #     sweep=sweep_configuration,
-    #     project='resnet9'
-    # )
+    sweep_configuration = {
+        'method': 'random',
+        'name': 'arch_search',
+        'metric': {'goal': 'maximize', 'name': 'test_acc'},
+        'parameters': 
+        {
+            "arch_extra_convs": {'values': generate_subsets([1,2,3])},
+            "arch_extra_residuals": {'values': generate_subsets([1,2,3])},
+        }
+    }
 
-    # cfg = base_cfg.copy()
-    # def launch_sweep():
-    #     if cfg['float16']:
-    #         model = ResNet9(10, device=device, dtype=torch.float16)
-    #     else:
-    #         model = ResNet9(10, device=device)
-    #     run_baseline_experiment("resnet9", model, trainset, testset, cfg)
+    sweep_id = wandb.sweep(
+        sweep=sweep_configuration,
+        project='resnet9'
+    )
 
-    # wandb.agent(sweep_id, launch_sweep, count=4)
+    cfg = base_cfg.copy()
+    def launch_sweep():
+        if cfg['float16']:
+            model = ResNet9(10, device=device, dtype=torch.float16)
+        else:
+            model = ResNet9(10, device=device)
+        run_baseline_experiment("resnet9", model, trainset, testset, cfg)
+
+    wandb.agent(sweep_id, launch_sweep, count=4)
 
     # %% Profile run
     # cfg = base_cfg.copy()
