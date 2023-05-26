@@ -38,8 +38,15 @@ class Add(nn.Module):
     def forward(self, x):
         return self.fn1(x) + self.fn2(x)
 
-def prep_block(c_in, c_out, **kw):
-    return nn.Conv2d(in_channels=c_in, out_channels=c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw)
+def prep_block(c_in, c_out, prep_bn_relu=True, **kw):
+    if prep_bn_relu:
+        return nn.Sequential(OrderedDict([
+            ('conv1', nn.Conv2d(in_channels=c_in, out_channels=c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw)),
+            ('bn1', nn.BatchNorm2d(c_out, **kw)),
+            ('relu1', nn.ReLU()),
+        ]))
+    else:
+        return nn.Conv2d(in_channels=c_in, out_channels=c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw)
 
 def res_block(c_in, c_out, stride, **kw):
     branch = nn.Sequential(OrderedDict([
@@ -65,32 +72,58 @@ def res_block(c_in, c_out, stride, **kw):
             ('residual', Residual(branch)),
         ]))
 
+def shortcut_block(c_in, c_out, stride, **kw):
+    blocks = [
+        ('bn1', nn.BatchNorm2d(c_in, **kw)),
+        ('relu1', nn.ReLU()),
+    ]
+    projection = (stride != 1) or (c_in != c_out)    
+    if projection:
+        blocks.append(
+            ('conv3', nn.Conv2d(c_in, c_out, kernel_size=3, stride=stride, padding=1, bias=False, **kw)))
+    return nn.Sequential(OrderedDict(blocks))
+
+def maxpool_block(c_in, c_out, stride, **kw):
+    ignored = stride
+    stride = 1
+    projection = (c_in != c_out)    
+    if projection:
+        blocks = [
+            ('conv1', nn.Conv2d(c_in, c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw)),
+            ('bn1', nn.BatchNorm2d(c_out, **kw)),
+            ('relu1', nn.ReLU()),
+            ('maxpool1', nn.MaxPool2d(2))
+        ]
+        return nn.Sequential(OrderedDict(blocks))
+    else:
+        return nn.Identity()
+
 class ResNet9(nn.Module):
-    def __init__(self, num_classes, c=64, **kw):
+    def __init__(self, num_classes, block, c=64, **kw):
         super(ResNet9, self).__init__()
         if isinstance(c, int):
             c = [c, 2*c, 4*c, 4*c]
 
-        self.prep = prep_block(3, c[0], **kw)
+        self.prep = prep_block(3, c[0], prep_bn_relu=True, **kw)
 
         self.layer1 = nn.Sequential(
-            res_block(c[0], c[0], stride=1, **kw),
-            res_block(c[0], c[0], stride=1, **kw),
+            block(c[0], c[0], stride=1, **kw),
+            block(c[0], c[0], stride=1, **kw),
         )
         # H,W: 32 -> 16, as strides
         self.layer2 = nn.Sequential(
-            res_block(c[0], c[1], stride=2, **kw),
-            res_block(c[1], c[1], stride=1, **kw),
+            block(c[0], c[1], stride=2, **kw),
+            block(c[1], c[1], stride=1, **kw),
         )
         # H,W: 16 -> 8
         self.layer3 = nn.Sequential(
-            res_block(c[1], c[2], stride=2, **kw),
-            res_block(c[2], c[2], stride=1, **kw),
+            block(c[1], c[2], stride=2, **kw),
+            block(c[2], c[2], stride=1, **kw),
         )
         # H,W: 8 -> 4
         self.layer4 = nn.Sequential(
-            res_block(c[2], c[3], stride=2, **kw),
-            res_block(c[3], c[3], stride=1, **kw),
+            block(c[2], c[3], stride=2, **kw),
+            block(c[3], c[3], stride=1, **kw),
         )
         # H,W: 4 -> 1
         self.pool = nn.MaxPool2d(kernel_size=4)
@@ -234,7 +267,7 @@ def run_baseline_experiment(exp_name, model, trainset, testset, cfg):
     def callback(epoch, *args):
         log_progress(epoch, cfg["log_freq"], *args)
 
-    tags = []
+    tags = cfg["tags"]
     if cfg['float16']:
         tags.append('float16')
         
@@ -283,10 +316,10 @@ if __name__ == "__main__":
     # %%
     # Convenient transform to normalize the image data
     base_cfg = {
-        "batch_size": 512,
+        "batch_size": 256,
         "lr_schedules": [
             (1e-3, 0.075, 8),
-            (0.075, 0.001, 22),
+            (0.075, 0.001, 12),
         ],
         "lr": 4,
         "log_freq": 1,
@@ -295,11 +328,13 @@ if __name__ == "__main__":
         "momentum": 0.9,
         "float16": True,
         "sweep": True,
+        "tags": ["backbone"],
     }
 
     train_transforms = [
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
+            # transforms.Cutout(n_holes=1, length=8),
         ]
     all_transforms = [
             transforms.ToTensor(),
@@ -325,11 +360,16 @@ if __name__ == "__main__":
     # Single run
     cfg = base_cfg.copy()
     if cfg['float16']:
-        model = ResNet9(10, device=device, dtype=torch.float16)
-    else:
-        model = ResNet9(10, device=device)
+        c = [64, 128, 256, 512]
+        model = ResNet9(10, c=c, device=device, block=maxpool_block, dtype=torch.float16)
+
+    # else:
+    #     model = ResNet9(10, device=device, block=maxpool_block, dtype=torch.float32)
         
-    run_baseline_experiment("resnet9", model, trainset, testset, cfg)
+    try:
+        run_baseline_experiment("resnet9", model, trainset, testset, cfg)
+    except:
+        import pdb; pdb.post_mortem()
 
     # # Sweep run
     # sweep_configuration = {
