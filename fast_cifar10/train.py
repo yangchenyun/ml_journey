@@ -220,6 +220,16 @@ def log_progress(i, freq, lr, train_acc, train_loss, test_acc, test_loss, train_
             'test_elapsed_time': test_elapsed_time,
         })
 
+def chained_lr_schedule(opt, schedules):
+    """
+    schedules: [](start_factor, end_factor, total_iters)
+    """
+    schedulers = [LinearLR(opt, start_factor=s[0], end_factor=s[1], total_iters=s[2]) for s in schedules]
+    milestones = [s[2] for s in schedules]
+    milestones = [sum(milestones[:i+1]) for i in range(len(milestones))][:-1]
+    scheduler = SequentialLR(opt, schedulers=schedulers, milestones=milestones)
+    return scheduler
+
 def run_baseline_experiment(exp_name, model, trainset, testset, cfg):
     def callback(epoch, *args):
         log_progress(epoch, cfg["log_freq"], *args)
@@ -252,19 +262,6 @@ def run_baseline_experiment(exp_name, model, trainset, testset, cfg):
                           weight_decay=cfg["weight_decay"],
                           momentum=cfg["momentum"])
 
-    # scheduler1 = LinearLR(opt, start_factor=0.001, end_factor=0.075, total_iters=7)
-    # scheduler2 = LinearLR(opt, start_factor=0.075, end_factor=0.005)
-    # scheduler = SequentialLR(opt, schedulers=[
-    #     scheduler1, scheduler2], milestones=[7])
-
-    # Baseline 1 with a manual learning rate schedule
-    scheduler1 = LinearLR(opt, start_factor=0.001, end_factor=0.075, total_iters=15)
-    scheduler2 = LinearLR(opt, start_factor=0.075, end_factor=0.005, total_iters=15)
-    scheduler3 = LinearLR(opt, start_factor=0.005, end_factor=0.001, total_iters=5)
-    scheduler = SequentialLR(opt, schedulers=[
-        scheduler1, scheduler2, scheduler3], milestones=[15, 30])
-
-
     train_cifar10(
         model,
         trainloader,
@@ -272,7 +269,7 @@ def run_baseline_experiment(exp_name, model, trainset, testset, cfg):
         device=device,
         n_epochs=cfg["n_epochs"],
         optimizer=opt,
-        scheduler=scheduler,
+        scheduler=chained_lr_schedule(opt, cfg['lr_schedules']),
         callback=callback,
     )
     wandb.finish()
@@ -284,10 +281,15 @@ if __name__ == "__main__":
     base_cfg = {
         "batch_size": 512,
         "n_epochs": 35,
+        "lr_schedules": [
+            (1e-3, 0.075, 15),
+            (0.075, 0.005, 15),
+            (0.005, 0.001, 5)
+        ],
+        "lr": 3.5,
         "log_freq": 1,
         "optimizer": "SGD",
-        "weight_decay": 0.001,
-        "lr": 1,
+        "weight_decay": 0.001, # 5e-4
         "momentum": 0.9,
         "float16": True,
         "sweep": False,
