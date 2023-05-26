@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import time
+from collections import OrderedDict
 
 import torchvision
 from torchvision import transforms
@@ -40,28 +41,28 @@ def prep_block(c_in, c_out, **kw):
     return nn.Conv2d(in_channels=c_in, out_channels=c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw)
 
 def res_block(c_in, c_out, stride, **kw):
-    branch = nn.Sequential(
-        nn.Conv2d(c_in, c_out, kernel_size=3, stride=stride, padding=1, bias=False, **kw),
-        nn.BatchNorm2d(c_out, **kw),
-        nn.ReLU(),
-        nn.Conv2d(c_out, c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw),
-    )
+    branch = nn.Sequential(OrderedDict([
+        ('conv1', nn.Conv2d(c_in, c_out, kernel_size=3, stride=stride, padding=1, bias=False, **kw)),
+        ('bn1', nn.BatchNorm2d(c_out, **kw)),
+        ('relu1', nn.ReLU()),
+        ('conv2', nn.Conv2d(c_out, c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw)),
+    ]))
     # The projection branch is used to adjust the shape of the input tensor to match the output tensor shape
     # with 1x1 convolutions
     projection = (stride != 1) or (c_in != c_out)    
     if projection:
-        return nn.Sequential(
-            nn.BatchNorm2d(c_in, **kw),
-            nn.ReLU(),
-            Add(branch, 
-                nn.Conv2d(c_in, c_out, kernel_size=1, stride=stride, padding=0, bias=False, **kw)),
-        )
+        return nn.Sequential(OrderedDict([
+            ('bn2', nn.BatchNorm2d(c_in, **kw)),
+            ('relu2', nn.ReLU()),
+            ('residual_conv3', Add(branch,
+                        nn.Conv2d(c_in, c_out, kernel_size=1, stride=stride, padding=0, bias=False, **kw))),
+        ]))
     else:
-        return nn.Sequential(
-            nn.BatchNorm2d(c_in, **kw),
-            nn.ReLU(),
-            Residual(branch),
-        )
+        return nn.Sequential(OrderedDict([
+            ('bn2', nn.BatchNorm2d(c_in, **kw)),
+            ('relu2', nn.ReLU()),
+            ('residual', Residual(branch)),
+        ]))
 
 class ResNet9(nn.Module):
     def __init__(self, num_classes, c=64, **kw):
