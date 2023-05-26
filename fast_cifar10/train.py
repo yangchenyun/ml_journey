@@ -115,9 +115,9 @@ def flexible_block(c_in, c_out, extra_conv=False, extra_res=False, **kw):
             ('conv3', nn.Conv2d(c_out, c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw)),
             ('bn3', nn.BatchNorm2d(c_out, **kw)),
             ('relu3', nn.ReLU()),
-            ('conv4', nn.Conv2d(c_out, c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw)),
-            ('bn4', nn.BatchNorm2d(c_out, **kw)),
-            ('relu4', nn.ReLU()),
+            # ('conv4', nn.Conv2d(c_out, c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw)),
+            # ('bn4', nn.BatchNorm2d(c_out, **kw)),
+            # ('relu4', nn.ReLU()),
         ]
         return Add(branch, nn.Sequential(OrderedDict(extra_blocks)))
     else:
@@ -307,6 +307,7 @@ def run_baseline_experiment(exp_name, trainset, testset, cfg):
             "lr_schedules": wandb.config.lr_schedules,
             "arch_extra_convs": wandb.config.arch_extra_convs,
             "arch_extra_residuals": wandb.config.arch_extra_residuals,
+            "arch_c": wandb.config.arch_c,
         })
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -316,6 +317,7 @@ def run_baseline_experiment(exp_name, trainset, testset, cfg):
     else:
         dtype = torch.float32
 
+    logger.info(f"Initializing model with dtype {dtype}, and arch {cfg['arch_c']} {cfg['arch_extra_convs']}, {cfg['arch_extra_residuals']}")
     model = ResNet9(10, 
                     c=cfg["arch_c"],
                     block=flexible_block,
@@ -352,6 +354,11 @@ def run_baseline_experiment(exp_name, trainset, testset, cfg):
     )
     wandb.finish()
 
+def generate_subsets(sequence):
+    subsets = []
+    for length in range(len(sequence) + 1):
+        subsets.extend(itertools.combinations(sequence, length))
+    return subsets
 # %%
 if __name__ == "__main__":
     # %%
@@ -360,7 +367,9 @@ if __name__ == "__main__":
         "batch_size": 256,
         "lr_schedules": [
             (1e-3, 0.075, 8),
-            (0.075, 0.001, 12),
+            (0.075, 0.01, 12),
+            (0.01, 0.005, 3),
+            (0.005, 0.001, 7),
         ],
         "lr": 4,
         "log_freq": 1,
@@ -370,9 +379,9 @@ if __name__ == "__main__":
         "float16": True,
         "sweep": True,
         "tags": ["backbone"],
-        "arch_c": [64, 128, 256, 512],
-        "arch_extra_convs": (),
-        "arch_extra_residuals": (),
+        "arch_c": [64, 128, 256, 256],
+        "arch_extra_convs": (3,),
+        "arch_extra_residuals": (1,2),
     }
 
     train_transforms = [
@@ -399,9 +408,9 @@ if __name__ == "__main__":
     classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
     # %%
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    # Single run
+    # # Single run
     cfg = base_cfg.copy()
     try:
         run_baseline_experiment("resnet9", trainset, testset, cfg)
@@ -410,20 +419,17 @@ if __name__ == "__main__":
     exit(0)
 
     # # Sweep run
-    def generate_subsets(sequence):
-        subsets = []
-        for length in range(len(sequence) + 1):
-            subsets.extend(itertools.combinations(sequence, length))
-        return subsets
-
     sweep_configuration = {
         'method': 'random',
-        'name': 'arch_search',
+        'name': 'arch_res_search',
         'metric': {'goal': 'maximize', 'name': 'test_acc'},
         'parameters': 
         {
-            "arch_extra_convs": {'values': generate_subsets([1,2,3])},
-            "arch_extra_residuals": {'values': generate_subsets([1,2,3])},
+            # "arch_extra_convs": {'values': [
+            #     (2,3),
+            #     (3,),
+            # ]},
+            # "arch_extra_residuals": {'values': generate_subsets([1,3])},
         }
     }
 
@@ -434,13 +440,9 @@ if __name__ == "__main__":
 
     cfg = base_cfg.copy()
     def launch_sweep():
-        if cfg['float16']:
-            model = ResNet9(10, device=device, dtype=torch.float16)
-        else:
-            model = ResNet9(10, device=device)
-        run_baseline_experiment("resnet9", model, trainset, testset, cfg)
+        run_baseline_experiment("resnet9", trainset, testset, cfg)
 
-    wandb.agent(sweep_id, launch_sweep, count=4)
+    wandb.agent(sweep_id, launch_sweep, count=2)
 
     # %% Profile run
     # cfg = base_cfg.copy()
