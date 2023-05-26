@@ -93,6 +93,36 @@ def maxpool_block(c_in, c_out, extra_conv=False, extra_res=False, **kw):
     ]
     return nn.Sequential(OrderedDict(blocks))
 
+def flexible_block(c_in, c_out, extra_conv=False, extra_res=False, **kw):
+    logger.info(f"flexible_block: c_in={c_in}, c_out={c_out}, extra_conv={extra_conv}, extra_res={extra_res}")
+    blocks = [
+        ('conv1', nn.Conv2d(c_in, c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw)),
+        ('bn1', nn.BatchNorm2d(c_out, **kw)),
+        ('relu1', nn.ReLU()),
+        ('maxpool1', nn.MaxPool2d(2))
+    ]
+    if extra_conv:
+        blocks += [
+            ('conv2', nn.Conv2d(c_out, c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw)),
+            ('bn2', nn.BatchNorm2d(c_out, **kw)),
+            ('relu2', nn.ReLU()),
+        ]
+
+    branch = nn.Sequential(OrderedDict(blocks))
+    if extra_res:
+        extra_blocks = [
+            ('branch', branch),
+            ('conv3', nn.Conv2d(c_out, c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw)),
+            ('bn3', nn.BatchNorm2d(c_out, **kw)),
+            ('relu3', nn.ReLU()),
+            ('conv4', nn.Conv2d(c_out, c_out, kernel_size=3, stride=1, padding=1, bias=False, **kw)),
+            ('bn4', nn.BatchNorm2d(c_out, **kw)),
+            ('relu4', nn.ReLU()),
+        ]
+        return Add(branch, nn.Sequential(OrderedDict(extra_blocks)))
+    else:
+        return branch
+
 class ResNet9(nn.Module):
     def __init__(self, num_classes, block, c=64, arch_extra_convs=(), arch_extra_residuals=(), **kw):
         super(ResNet9, self).__init__()
@@ -288,7 +318,7 @@ def run_baseline_experiment(exp_name, trainset, testset, cfg):
 
     model = ResNet9(10, 
                     c=cfg["arch_c"],
-                    block=maxpool_block,
+                    block=flexible_block,
                     arch_extra_convs=cfg["arch_extra_convs"],
                     arch_extra_residuals=cfg["arch_extra_residuals"],
                     device=device, 
