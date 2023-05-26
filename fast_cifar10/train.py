@@ -226,9 +226,9 @@ def chained_lr_schedule(opt, schedules):
     """
     schedulers = [LinearLR(opt, start_factor=s[0], end_factor=s[1], total_iters=s[2]) for s in schedules]
     milestones = [s[2] for s in schedules]
-    milestones = [sum(milestones[:i+1]) for i in range(len(milestones))][:-1]
-    scheduler = SequentialLR(opt, schedulers=schedulers, milestones=milestones)
-    return scheduler
+    milestones = [sum(milestones[:i+1]) for i in range(len(milestones))]
+    scheduler = SequentialLR(opt, schedulers=schedulers, milestones=milestones[:-1])
+    return scheduler, milestones[-1]
 
 def run_baseline_experiment(exp_name, model, trainset, testset, cfg):
     def callback(epoch, *args):
@@ -245,6 +245,7 @@ def run_baseline_experiment(exp_name, model, trainset, testset, cfg):
             "batch_size": wandb.config.batch_size,
             "lr": wandb.config.lr,
             "weight_decay": wandb.config.weight_decay,
+            "lr_schedules": wandb.config.lr_schedules,
         })
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -262,14 +263,17 @@ def run_baseline_experiment(exp_name, model, trainset, testset, cfg):
                           weight_decay=cfg["weight_decay"],
                           momentum=cfg["momentum"])
 
+    scheduler, n_epochs = chained_lr_schedule(opt, cfg['lr_schedules'])
+    print(f"Using epochs: {n_epochs} with lr_schedules: {cfg['lr_schedules']}")
+
     train_cifar10(
         model,
         trainloader,
         testloader,
         device=device,
-        n_epochs=cfg["n_epochs"],
+        n_epochs=n_epochs,
         optimizer=opt,
-        scheduler=chained_lr_schedule(opt, cfg['lr_schedules']),
+        scheduler=scheduler,
         callback=callback,
     )
     wandb.finish()
@@ -280,19 +284,17 @@ if __name__ == "__main__":
     # Convenient transform to normalize the image data
     base_cfg = {
         "batch_size": 512,
-        "n_epochs": 35,
         "lr_schedules": [
-            (1e-3, 0.075, 15),
-            (0.075, 0.005, 15),
-            (0.005, 0.001, 5)
+            (1e-3, 0.075, 8),
+            (0.075, 0.001, 22),
         ],
-        "lr": 3.5,
+        "lr": 4,
         "log_freq": 1,
         "optimizer": "SGD",
         "weight_decay": 0.001, # 5e-4
         "momentum": 0.9,
         "float16": True,
-        "sweep": False,
+        "sweep": True,
     }
 
     train_transforms = [
@@ -320,8 +322,8 @@ if __name__ == "__main__":
     # %%
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+    # Single run
     cfg = base_cfg.copy()
-
     if cfg['float16']:
         model = ResNet9(10, device=device, dtype=torch.float16)
     else:
@@ -332,13 +334,16 @@ if __name__ == "__main__":
     # # Sweep run
     # sweep_configuration = {
     #     'method': 'random',
-    #     'name': 'sweep',
+    #     'name': 'lr_schedules_sweep',
     #     'metric': {'goal': 'maximize', 'name': 'test_acc'},
     #     'parameters': 
     #     {
-    #         'batch_size': {'values': [512]},
-    #         'lr': {'values': [4.0]},
-    #         # 'weight_decay': {'max': 0.01, 'min': 0.001},
+    #         "lr_schedules": {'values': [
+    #             [
+    #                 (1e-3, 0.075, 8),
+    #                 (0.075, 0.001, 22),
+    #             ],
+    #         ]},
     #     }
     # }
 
