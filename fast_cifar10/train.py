@@ -19,6 +19,7 @@ import logging
 log_format = "%(asctime)s - %(levelname)s - %(message)s"
 logging.basicConfig(level=logging.INFO, stream=sys.stdout, format=log_format)
 logger = logging.getLogger()
+
 #%%
 class Residual(nn.Module):
     def __init__(self, fn: nn.Module):
@@ -54,7 +55,7 @@ def res_block(c_in, c_out, stride, **kw):
         return nn.Sequential(OrderedDict([
             ('bn2', nn.BatchNorm2d(c_in, **kw)),
             ('relu2', nn.ReLU()),
-            ('residual_conv3', Add(branch,
+            ('residual_conv3', Add(branch, 
                         nn.Conv2d(c_in, c_out, kernel_size=1, stride=stride, padding=0, bias=False, **kw))),
         ]))
     else:
@@ -119,6 +120,7 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
     running_loss = 0.0
     correct = 0
     total = 0
+
     for i, data in enumerate(dataloader, 0):
         inputs, labels = data
         inputs, labels = inputs.to(device), labels.to(device)
@@ -126,7 +128,8 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
         optimizer.zero_grad()
 
         outputs = model(inputs)
-        loss = criterion(outputs, labels)
+        loss = criterion(outputs.float(), labels.long())  # cross entropy loss only works with 4 bytes
+
         loss.backward()
         optimizer.step()
 
@@ -151,7 +154,7 @@ def eval_epoch(model, dataloader, criterion, device):
             inputs, labels = inputs.to(device), labels.to(device)
 
             outputs = model(inputs)
-            loss = criterion(outputs, labels)
+            loss = criterion(outputs.float(), labels.long()) 
 
             running_loss += loss.item()
             _, predicted = outputs.max(1)
@@ -221,31 +224,46 @@ def run_baseline_experiment(exp_name, model, trainset, testset, cfg):
     def callback(epoch, *args):
         log_progress(epoch, cfg["log_freq"], *args)
 
-    run = wandb.init(project=exp_name, config=cfg, group='SGD', tags=['prep-1'])
+    tags = []
+    if cfg['float16']:
+        tags.append('float16')
+        
+    run = wandb.init(project=exp_name, config=cfg, group='SGD', tags=tags)
 
-    cfg.update({
-        "batch_size": wandb.config.batch_size,
-        "lr": wandb.config.lr,
-        "weight_decay": wandb.config.weight_decay,
-    })
-
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=cfg["batch_size"],
-                                              shuffle=True, num_workers=4)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=cfg["batch_size"],
-                                            shuffle=False, num_workers=4)
+    if cfg['sweep']:
+        cfg.update({
+            "batch_size": wandb.config.batch_size,
+            "lr": wandb.config.lr,
+            "weight_decay": wandb.config.weight_decay,
+        })
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=cfg["batch_size"],
+                                              shuffle=True, 
+                                              num_workers=4)
+
+    testloader = torch.utils.data.DataLoader(testset, batch_size=cfg["batch_size"],
+                                            shuffle=False, 
+                                            num_workers=4)
 
     opt = torch.optim.SGD(model.parameters(),
                           lr=cfg["lr"],
                           weight_decay=cfg["weight_decay"],
                           momentum=cfg["momentum"])
 
+    # scheduler1 = LinearLR(opt, start_factor=0.001, end_factor=0.075, total_iters=7)
+    # scheduler2 = LinearLR(opt, start_factor=0.075, end_factor=0.005)
+    # scheduler = SequentialLR(opt, schedulers=[
+    #     scheduler1, scheduler2], milestones=[7])
+
     # Baseline 1 with a manual learning rate schedule
-    scheduler1 = LinearLR(opt, start_factor=0.001, end_factor=0.075, total_iters=10)
-    scheduler2 = LinearLR(opt, start_factor=0.075, end_factor=0.005, total_iters=20)
+    scheduler1 = LinearLR(opt, start_factor=0.001, end_factor=0.075, total_iters=15)
+    scheduler2 = LinearLR(opt, start_factor=0.075, end_factor=0.005, total_iters=15)
+    scheduler3 = LinearLR(opt, start_factor=0.005, end_factor=0.001, total_iters=5)
     scheduler = SequentialLR(opt, schedulers=[
-        scheduler1, scheduler2], milestones=[10, 30])
+        scheduler1, scheduler2, scheduler3], milestones=[15, 30])
+
 
     train_cifar10(
         model,
@@ -271,57 +289,71 @@ if __name__ == "__main__":
         "weight_decay": 0.001,
         "lr": 1,
         "momentum": 0.9,
+        "float16": True,
+        "sweep": False,
     }
 
-    train_transform = transforms.Compose(
-        [
-            # transforms.ColorJitter(contrast=0.5),
+    train_transforms = [
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
-            # transforms.RandomRotation(30),
+        ]
+    all_transforms = [
             transforms.ToTensor(),
-            # values specific for CIFAR10
             transforms.Normalize((0.4914, 0.4822, 0.4465),
                                  (0.2023, 0.1994, 0.2010)),
-        ])
-    trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                            download=True, transform=train_transform)
-    test_transform = transforms.Compose(
-        [transforms.ToTensor(),
-         # values specific for CIFAR10
-         transforms.Normalize((0.4914, 0.4822, 0.4465),
-                              (0.2023, 0.1994, 0.2010)),
-         ])
-    testset = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                           download=True, transform=test_transform)
+    ]
+    if base_cfg['float16']:
+        all_transforms += [transforms.Lambda(lambda x: x.half())]
+
+    trainset = torchvision.datasets.CIFAR10(root='./data', 
+                                            train=True,
+                                            download=True, 
+                                            transform=transforms.Compose(train_transforms + all_transforms))
+    testset = torchvision.datasets.CIFAR10(root='./data', 
+                                           train=False,
+                                           download=True, 
+                                           transform=transforms.Compose(all_transforms))
     classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
     # %%
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    sweep_configuration = {
-        'method': 'random',
-        'name': 'sweep',
-        'metric': {'goal': 'maximize', 'name': 'test_acc'},
-        'parameters': 
-        {
-            'batch_size': {'values': [512]},
-            'lr': {'max': 4.0, 'min': 0.5},
-            # 'weight_decay': {'max': 0.01, 'min': 0.001},
-        }
-    }
-
-    sweep_id = wandb.sweep(
-        sweep=sweep_configuration,
-        project='resnet9'
-    )
-
     cfg = base_cfg.copy()
-    def launch_sweep():
-        model = ResNet9(10, device=device)
-        run_baseline_experiment("resnet9", model, trainset, testset, cfg)
 
-    wandb.agent(sweep_id, launch_sweep, count=4)
+    if cfg['float16']:
+        model = ResNet9(10, device=device, dtype=torch.float16)
+    else:
+        model = ResNet9(10, device=device)
+        
+    run_baseline_experiment("resnet9", model, trainset, testset, cfg)
+
+    # # Sweep run
+    # sweep_configuration = {
+    #     'method': 'random',
+    #     'name': 'sweep',
+    #     'metric': {'goal': 'maximize', 'name': 'test_acc'},
+    #     'parameters': 
+    #     {
+    #         'batch_size': {'values': [512]},
+    #         'lr': {'values': [4.0]},
+    #         # 'weight_decay': {'max': 0.01, 'min': 0.001},
+    #     }
+    # }
+
+    # sweep_id = wandb.sweep(
+    #     sweep=sweep_configuration,
+    #     project='resnet9'
+    # )
+
+    # cfg = base_cfg.copy()
+    # def launch_sweep():
+    #     if cfg['float16']:
+    #         model = ResNet9(10, device=device, dtype=torch.float16)
+    #     else:
+    #         model = ResNet9(10, device=device)
+    #     run_baseline_experiment("resnet9", model, trainset, testset, cfg)
+
+    # wandb.agent(sweep_id, launch_sweep, count=4)
 
     # %% Profile run
     # cfg = base_cfg.copy()
@@ -330,11 +362,10 @@ if __name__ == "__main__":
     #     'n_epochs': 1,
     # })
     # input = torch.randn(cfg['batch_size'], 3, 32, 32).to(device)
-    # model = ResNet9(10, device=device)
 
     # with profile(activities=[
-    #         ProfilerActivity.CUDA],
-    #              record_shapes=True,
+    #         ProfilerActivity.CUDA], 
+    #              record_shapes=True, 
     #              with_modules=True,
     #              with_flops=True,
     #              ) as prof:
