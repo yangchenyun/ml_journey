@@ -46,12 +46,12 @@ def relu_forward(x):
     return np.maximum(0, x)
 
 
-def softmax_loss(x, y):
+def softmax_loss(x, y, epilson=1e-5):
     # shift values for numerical stability
     x -= np.max(x, axis=1, keepdims=True)
 
     # compute softmax values
-    softmax = np.exp(x) / np.sum(np.exp(x), axis=1, keepdims=True)
+    softmax = np.exp(x) / np.sum(np.exp(x), axis=1, keepdims=True) + epilson
 
     # number of samples
     num_samples = x.shape[0]
@@ -182,7 +182,7 @@ class FullyConnectedNet(object):
 
     def loss(self, X, y=None):
         """Compute loss and gradient for the fully connected net.
-        
+
         Inputs:
         - X: Array of input data of shape (N, d_1, ..., d_k)
         - y: Array of labels, of shape (N,). y[i] gives the label for X[i].
