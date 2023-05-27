@@ -106,7 +106,14 @@ def rmsprop(w, dw, config=None):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    lr = config["learning_rate"]
+    dr = config["decay_rate"]
+    eps = config["epsilon"]
+    cache = config["cache"]
+
+    # NOTE: RMSProp, modulate the learning rate by the recent gradient history
+    config["cache"] = dr * cache + (1 - dr) * dw**2
+    next_w = w - lr * dw / (np.sqrt(config["cache"]) + eps)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -150,8 +157,15 @@ def adam(w, dw, config=None):
     # using it in any calculations.                                           #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    config["t"] += 1
+    config["m"] = config["beta1"] * config["m"] + (1 - config["beta1"]) * dw
+    config["v"] = config["beta2"] * config["v"] + (1 - config["beta2"]) * dw**2
 
-    pass
+    # Apply bias correction
+    m_hat = config["m"] / (1 - config["beta1"] ** config["t"])
+    v_hat = config["v"] / (1 - config["beta2"] ** config["t"])
+
+    next_w = w - config["learning_rate"] * m_hat / (np.sqrt(v_hat) + config["epsilon"])
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
