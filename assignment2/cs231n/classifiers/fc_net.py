@@ -252,7 +252,9 @@ class FullyConnectedNet(object):
             # )
             if i != self.num_layers:
                 if self.use_dropout:
-                    pass
+                    output_grads[f"Out{i+1}"] = dropout_backward(
+                        output_grads[f"Out{i+1}"], dropout_cache[i]
+                    )
 
                 # Relu_backward, ugly recomputation
                 output_grads[f"Out{i+1}"] = relu_backward(
