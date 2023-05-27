@@ -283,8 +283,56 @@ class FullyConnectedNet(object):
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        #
 
-        pass
+        loss = softmax_loss(scores, y)
+        d_scores = softmax_backward(scores, y)
+        assert d_scores.shape == scores.shape
+
+        # Used for tracking output gradients at each layer
+        output_grads = {}
+        output_grads[f"Out{self.num_layers + 1}"] = d_scores
+
+        # Computing the gradients in reverse order of the architecture:
+        #
+        #   {affine - [batch/layer norm] - relu - [dropout]} x (L - 1) - affine - softmax
+        #
+        for i in reversed(range(1, self.num_layers + 1)):
+            inputs_i = as_inputs(i)
+            # print(
+            #     f"Backward pass {i} x, W, b, out_grad:",
+            #     inputs_i.shape,
+            #     self.params[f"W{i}"].shape,
+            #     self.params[f"b{i}"].shape,
+            #     output_grads[f"Out{i+1}"].shape,
+            # )
+            if i != self.num_layers:
+                if self.use_dropout:
+                    pass
+
+                # Relu_backward, ugly recomputation
+                affine_output_i = inputs_i @ self.params[f"W{i}"] + self.params[f"b{i}"]
+                mask = affine_output_i > 0
+                output_grads[f"Out{i+1}"] = output_grads[f"Out{i+1}"] * mask
+
+                if self.normalization == "batchnorm":
+                    pass
+                elif self.normalization == "layernorm":
+                    pass
+
+            # X_i^T @ W_i + b_i = Out_i
+            # (N, fan_in) @ (fan_in, fan_out) + (1, fan_out) = (N, fan_out)
+
+            grads[f"W{i}"] = inputs_i.T @ output_grads[f"Out{i+1}"]
+            grads[f"b{i}"] = np.sum(output_grads[f"Out{i+1}"], axis=0, keepdims=True)
+            output_grads[f"Out{i}"] = output_grads[f"Out{i+1}"] @ self.params[f"W{i}"].T
+
+            assert grads[f"W{i}"].shape == self.params[f"W{i}"].shape
+            assert grads[f"b{i}"].shape == self.params[f"b{i}"].shape
+            assert output_grads[f"Out{i}"].shape == inputs_i.shape
+
+            if self.reg > 0:
+                grads[f"W{i}"] += self.reg * self.params[f"W{i}"]
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
