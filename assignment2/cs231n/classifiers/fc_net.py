@@ -6,70 +6,6 @@ from ..layers import *
 from ..layer_utils import *
 
 
-def batchnorm_forward(x, gamma, beta, bn_param):
-    """Forward pass for batch normalization.
-
-    It computes per-feature mean and variance and normalizes the input using them.
-    """
-    x_n = x.shape[0]
-    x_mean = np.mean(x, axis=0)
-    x_var = np.var(x, axis=0)
-
-    # Update running mean and variances
-    bn_param["running_mean"] = (
-        x_mean + bn_param["running_mean"] * bn_param["running_n"]
-    ) / bn_param["running_n"]
-    bn_param["running_var"] = (
-        x_var + bn_param["running_var"] * bn_param["running_n"]
-    ) / bn_param["running_n"]
-    bn_param["running_n"] += x_n
-
-    x = (x - x_mean) / x_var
-    return x * gamma + beta
-
-
-def dropout_forward(x, dropout_param):
-    """Compute the forward pass for dropout.
-
-    Here we scales values which are kept by 1 / p to keep the expected value the same.
-
-    dropout_param = {"mode": "train", "p": dropout_keep_ratio}
-    """
-    if dropout_param["mode"] == "train":
-        mask = np.random.rand(*x.shape) < dropout_param["p"]
-        out = x * mask + x * (1 - mask) / dropout_param["p"]
-    return out
-
-
-def relu_forward(x):
-    """Forward pass for a layer of rectified linear units."""
-    return np.maximum(0, x)
-
-
-def softmax_loss(x, y, epilson=1e-5):
-    # shift values for numerical stability
-    x -= np.max(x, axis=1, keepdims=True)
-
-    # compute softmax values
-    softmax = np.exp(x) / np.sum(np.exp(x), axis=1, keepdims=True) + epilson
-
-    # number of samples
-    num_samples = x.shape[0]
-
-    # loss: average cross-entropy loss
-    loss = np.sum(-np.log(softmax[np.arange(num_samples), y])) / num_samples
-
-    return loss
-
-
-def softmax_backward(scores, y):
-    """Compute the backward pass for softmax loss."""
-    num_samples = scores.shape[0]
-    softmax = np.exp(scores) / np.sum(np.exp(scores), axis=1, keepdims=True)
-    softmax[np.arange(num_samples), y] -= 1
-    return softmax / num_samples
-
-
 class FullyConnectedNet(object):
     """Class for a multi-layer fully connected neural network.
 
@@ -228,6 +164,11 @@ class FullyConnectedNet(object):
         outputs[0] = X.reshape(X.shape[0], -1)
         as_inputs = lambda i: outputs[i - 1]  # alias inputs[i] == output[i - 1]
 
+        affine_cache = {}
+        bn_cache = {}
+        relu_cache = {}
+        dropout_cache = {}
+
         for i in range(1, self.num_layers + 1):
             # print(
             #     f"forward pass {i}",
@@ -235,14 +176,16 @@ class FullyConnectedNet(object):
             #     self.params[f"W{i}"].shape,
             #     self.params[f"b{i}"].shape,
             # )
-            outputs[i] = outputs[i - 1] @ self.params[f"W{i}"] + self.params[f"b{i}"]
+            outputs[i], affine_cache[i] = affine_forward(
+                outputs[i - 1], self.params[f"W{i}"], self.params[f"b{i}"]
+            )
 
             # NOTE: only affine layer at the end
             if i == self.num_layers:
                 break
 
             if self.normalization == "batchnorm":
-                outputs[i] = batchnorm_forward(
+                outputs[i], bn_cache[i] = batchnorm_forward(
                     outputs[i],
                     self.params[f"gamma{i}"],
                     self.params[f"beta{i}"],
@@ -251,10 +194,12 @@ class FullyConnectedNet(object):
             elif self.normalization == "layernorm":
                 pass
 
-            outputs[i] = relu_forward(outputs[i])
+            outputs[i], relu_cache[i] = relu_forward(outputs[i])
 
             if self.use_dropout:
-                outputs[i] = dropout_forward(outputs[i], self.dropout_param)
+                outputs[i], dropout_cache[i] = dropout_forward(
+                    outputs[i], self.dropout_param
+                )
 
         scores = outputs[self.num_layers]
         assert scores.shape == (X.shape[0], self.num_classes)
@@ -285,13 +230,12 @@ class FullyConnectedNet(object):
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         #
 
-        loss = softmax_loss(scores, y)
-        d_scores = softmax_backward(scores, y)
-        assert d_scores.shape == scores.shape
+        loss, dx = softmax_loss(scores, y)
+        assert dx.shape == scores.shape
 
         # Used for tracking output gradients at each layer
         output_grads = {}
-        output_grads[f"Out{self.num_layers + 1}"] = d_scores
+        output_grads[f"Out{self.num_layers + 1}"] = dx
 
         # Computing the gradients in reverse order of the architecture:
         #
@@ -311,9 +255,9 @@ class FullyConnectedNet(object):
                     pass
 
                 # Relu_backward, ugly recomputation
-                affine_output_i = inputs_i @ self.params[f"W{i}"] + self.params[f"b{i}"]
-                mask = affine_output_i > 0
-                output_grads[f"Out{i+1}"] = output_grads[f"Out{i+1}"] * mask
+                output_grads[f"Out{i+1}"] = relu_backward(
+                    output_grads[f"Out{i+1}"], relu_cache[i]
+                )
 
                 if self.normalization == "batchnorm":
                     pass
@@ -323,13 +267,11 @@ class FullyConnectedNet(object):
             # X_i^T @ W_i + b_i = Out_i
             # (N, fan_in) @ (fan_in, fan_out) + (1, fan_out) = (N, fan_out)
 
-            grads[f"W{i}"] = inputs_i.T @ output_grads[f"Out{i+1}"]
-            grads[f"b{i}"] = np.sum(output_grads[f"Out{i+1}"], axis=0, keepdims=True)
-            output_grads[f"Out{i}"] = output_grads[f"Out{i+1}"] @ self.params[f"W{i}"].T
+            dx, dw, db = affine_backward(output_grads[f"Out{i+1}"], affine_cache[i])
 
-            assert grads[f"W{i}"].shape == self.params[f"W{i}"].shape
-            assert grads[f"b{i}"].shape == self.params[f"b{i}"].shape
-            assert output_grads[f"Out{i}"].shape == inputs_i.shape
+            grads[f"W{i}"] = dw
+            grads[f"b{i}"] = db
+            output_grads[f"Out{i}"] = dx
 
             if self.reg > 0:
                 grads[f"W{i}"] += self.reg * self.params[f"W{i}"]
