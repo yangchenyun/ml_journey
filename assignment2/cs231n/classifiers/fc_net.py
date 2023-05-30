@@ -83,9 +83,11 @@ class FullyConnectedNet(object):
             # Shape in X^T*W +b form, X is given as (N, d1, d2, ..) shape
             self.params[f"W{i}"] = np.random.normal(0, weight_scale, (fan_in, fan_out))
             self.params[f"b{i}"] = np.zeros((1, fan_out))
+
             if self.normalization == "batchnorm":
-                self.params[f"gamma{i}"] = np.ones((1, fan_out))
-                self.params[f"beta{i}"] = np.zeros((1, fan_out))
+                if i != self.num_layers:
+                    self.params[f"gamma{i}"] = np.ones((1, fan_out))
+                    self.params[f"beta{i}"] = np.zeros((1, fan_out))
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -256,13 +258,16 @@ class FullyConnectedNet(object):
                         output_grads[f"Out{i+1}"], dropout_cache[i]
                     )
 
-                # Relu_backward, ugly recomputation
                 output_grads[f"Out{i+1}"] = relu_backward(
                     output_grads[f"Out{i+1}"], relu_cache[i]
                 )
 
                 if self.normalization == "batchnorm":
-                    pass
+                    (
+                        output_grads[f"Out{i+1}"],
+                        grads[f"gamma{i}"],
+                        grads[f"beta{i}"],
+                    ) = batchnorm_backward_alt(output_grads[f"Out{i+1}"], bn_cache[i])
                 elif self.normalization == "layernorm":
                     pass
 
@@ -277,6 +282,7 @@ class FullyConnectedNet(object):
 
             if self.reg > 0:
                 grads[f"W{i}"] += self.reg * self.params[f"W{i}"]
+                loss += 0.5 * self.reg * np.sum(self.params[f"W{i}"] ** 2)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
