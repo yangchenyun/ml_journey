@@ -236,12 +236,20 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         # might prove to be helpful.                                          #
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-        x_mean = np.mean(x, axis=0)
-        x_var = np.var(x, axis=0)
+        n = x.shape[0]
+        x_mean = 1 / n * x.sum(0, keepdims=True)
+        x_diff = x - x_mean
+        x_diff2 = x_diff**2
+        x_var = (
+            1 / (n - 1) * (x_diff2).sum(0, keepdims=True)
+        )  # note: Bessel's correction (dividing by n-1, not n)
+        x_var_inv = (x_var + eps) ** -0.5
+        x_hat = x_diff * x_var_inv
+        out = x_hat * gamma + beta
+
         running_mean = (1 - momentum) * x_mean + running_mean * momentum
         running_var = (1 - momentum) * x_var + running_var * momentum
-        x_hat = (x - x_mean) / np.sqrt(x_var + eps)
-        out = x_hat * gamma + beta
+        cache = gamma, x_var, x_diff, x_mean, x_hat, eps
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         #######################################################################
@@ -289,6 +297,7 @@ def batchnorm_backward(dout, cache):
     - dbeta: Gradient with respect to shift parameter beta, of shape (D,)
     """
     dx, dgamma, dbeta = None, None, None
+    gamma, x_var, x_diff, x_mean, x_hat, eps = cache
     ###########################################################################
     # TODO: Implement the backward pass for batch normalization. Store the    #
     # results in the dx, dgamma, and dbeta variables.                         #
@@ -297,7 +306,65 @@ def batchnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    # Here is the detailed breakdown of the forwward pass, with explicit broadcasting
+
+    # x_mean = np.mean(x, axis=0).broadcast_to(x.shape)
+    # x_var = np.var(x, axis=0).broadcast_to(x.shape)
+    # Could be rewritten as:
+    # x_var = (np.sum((x - x_mean)**2, axis=0) / n).broadcast_to(x.shape)
+    # x_hat = (x - x_mean) / np.sqrt(x_var + eps)
+    # out = x_hat * gamma + beta
+
+    dbeta = dout.sum(axis=0)
+    dgamma = np.sum(dout * x_hat, 0)
+    dx_hat = dout * gamma
+
+    n = dx_hat.shape[0]
+
+    # Version #1
+    #
+    # Forward pass calculation:
+    # x_mean = 1 / n * x.sum(0, keepdims=True)
+    # x_diff = x - x_mean
+    # x_diff2 = x_diff**2
+    # x_var = (
+    #     1 / (n - 1) * (x_diff2).sum(0, keepdims=True)
+    # )  # note: Bessel's correction (dividing by n-1, not n)
+    # x_var_inv = (x_var + eps) ** -0.5
+    # x_hat = x_diff * x_var_inv
+    # out = x_hat * gamma + beta
+
+    x_var_inv = (x_var + eps) ** -0.5
+    dx_diff = dx_hat * x_var_inv
+    # NOTE: summing out all rows to form the vector
+    dx_var_inv = (dx_hat * x_diff).sum(0, keepdims=True)
+    dx_var = dx_var_inv * (-0.5 * (x_var + eps) ** -1.5)
+
+    dx_diff2 = np.broadcast_to(dx_var / (n - 1), x_diff.shape)
+    dx_diff += dx_diff2 * (2 * x_diff)
+    dx = dx_diff.copy()
+    dx_mean = -dx_diff.sum(axis=0)
+    dx += np.broadcast_to(dx_mean / n, dx_hat.shape)
+
+    # # Version #2 - works as well
+    # #
+    # # From: x_hat = (x - x_mean) / np.sqrt(x_var + eps)
+    # x_var_inv = (x_var + eps) ** -0.5
+    # dx = dx_hat * x_var_inv
+    # dx_mean = (dx_hat * -x_var_inv).sum(0, keepdims=True)
+
+    # # From: dx_var = np.multiply(dx_hat, -0.5 * (x - x_mean) * (x_var + eps) ** (-1.5))
+    # dx_var_inv = (dx_hat * (x_hat / x_var_inv)).sum(0, keepdims=True)
+    # dx_var = dx_var_inv * (-0.5 * (x_var + eps) ** -1.5)
+
+    # # From: x_var = (np.sum((x - x_mean)**2, axis=0) / n - 1)
+    # dx_mean += (
+    #     dx_var * (1 / (n - 1)) * 2 * (x_hat / x_var_inv).sum(0, keepdims=True) * (-1.0)
+    # )
+    # dx += dx_var * (1 / (n - 1)) * 2 * (x_hat / x_var_inv)
+
+    # # From: x_mean = np.mean(x, axis=0).broadcast_to(x.shape)
+    # dx += np.broadcast_to(dx_mean / n, dx.shape)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -331,7 +398,19 @@ def batchnorm_backward_alt(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    gamma, x_var, x_diff, x_mean, x_hat, eps = cache
+    n = dout.shape[0]
+    dbeta = dout.sum(axis=0)
+    dgamma = np.sum(dout * x_hat, 0)
+    dx_hat = dout * gamma
+
+    x_var_inv = (x_var + eps) ** -0.5
+    dx = (
+        gamma
+        * x_var_inv
+        / n
+        * (n * dout - dout.sum(0) - n / (n - 1) * x_hat * (dout * x_hat).sum(0))
+    )
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
