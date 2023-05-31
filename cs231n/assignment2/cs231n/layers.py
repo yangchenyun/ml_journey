@@ -665,14 +665,92 @@ def conv_forward_naive(x, w, b, conv_param):
     # Hint: you can use the function np.pad for padding.                      #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    N, C, H, W = x.shape
+    F, _, HH, WW = w.shape
+    stride = conv_param["stride"]
+    pad = conv_param["pad"]
+    padded = np.pad(x, ((0,), (0,), (pad,), (pad,)), "constant")
+    H_prime = (H + 2 * pad - HH) // stride + 1
+    W_prime = (W + 2 * pad - WW) // stride + 1
 
-    pass
+    # Approach #1 - with explicit loops
+    out = np.zeros((N, F, H_prime, W_prime))
+    # For every input n ∈ N, apply every filter f ∈ F and summing out the C channels
+    for n in range(N):
+      for f in range(F):
+        for h_i in range(H_prime):
+          for w_i in range(W_prime):
+            out[n, f, h_i, w_i] = np.sum(
+              padded[n, :, h_i * stride : h_i * stride + HH, w_i * stride : w_i * stride + WW] * w[f, :, :, :]
+            ) + b[f]
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
     cache = (x, w, b, conv_param)
+    return out, cache
+
+
+def conv_forward_matmul(x, w, b, conv_param):
+    """A fast implementation of the forward pass for a convolutional layer.
+
+    The input consists of N data points, each with C channels, height H and
+    width W. We convolve each input with F different filters, where each filter
+    spans all C channels and has height HH and width WW.
+
+    Input:
+    - x: Input data of shape (N, C, H, W)
+    - w: Filter weights of shape (F, C, HH, WW)
+    - b: Biases, of shape (F,)
+    - conv_param: A dictionary with the following keys:
+      - 'stride': The number of pixels between adjacent receptive fields in the
+        horizontal and vertical directions.
+      - 'pad': The number of pixels that will be used to zero-pad the input.
+
+    During padding, 'pad' zeros should be placed symmetrically (i.e equally on both sides)
+    along the height and width axes of the input. Be careful not to modfiy the original
+    input x directly.
+
+    Returns a tuple of:
+    - out: Output data, of shape (N, F, H', W') where H' and W' are given by
+      H' = 1 + (H + 2 * pad - HH) / stride
+      W' = 1 + (W + 2 * pad - WW) / stride
+    - cache: (x, w, b, conv_param)
+    """
+    out = None
+    ###########################################################################
+    # TODO: Implement the convolutional forward pass.                         #
+    # Hint: you can use the function np.pad for padding.                      #
+    ###########################################################################
+    # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    cache = (x, w, b, conv_param)
+
+    N, C, H, W = x.shape
+    F, _, HH, WW = w.shape
+    stride = conv_param["stride"]
+    pad = conv_param["pad"]
+    padded = np.pad(x, ((0,), (0,), (pad,), (pad,)), "constant")
+    H_prime = (H + 2 * pad - HH) // stride + 1
+    W_prime = (W + 2 * pad - WW) // stride + 1
+
+    # Approach #2 - As matrix multiplication
+    padded = padded.transpose((0, 2, 3, 1)) # N, C, H, W -> N, H', W', C
+    w = w.transpose((2, 3, 1, 0)) # F, C, HH, WW -> HH, WW, C, F
+
+    Ns,Hs,Ws,Cs = padded.strides
+    # NOTE: strided traversal of the padded input for convolutions
+    conv_strides = (Ns, Hs*stride, Ws*stride, Hs, Ws, Cs)
+    inner_dim = (HH, WW, C)
+    conv_shape = (N, H_prime, W_prime,) + inner_dim
+    conved = np.lib.stride_tricks.as_strided(padded, shape=conv_shape, strides=conv_strides)
+
+    out = conved.reshape(-1, np.prod(inner_dim)) @ w.reshape(np.prod(inner_dim), -1) + b  # NOTE: broadcast with b here
+    out = out.reshape(N, H_prime, W_prime, F).transpose((0, 3, 1, 2))  # N, F, H', W'
+    # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    ###########################################################################
+    #                             END OF YOUR CODE                            #
+    ###########################################################################
     return out, cache
 
 
@@ -693,8 +771,39 @@ def conv_backward_naive(dout, cache):
     # TODO: Implement the convolutional backward pass.                        #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    x, w, b, conv_param = cache
+    N, C, H, W = x.shape
+    F, _, HH, WW = w.shape
+    _, _, H_prime, W_prime = dout.shape
+    stride = conv_param["stride"]
+    pad = conv_param["pad"]
 
-    pass
+    db = dout.sum(axis=(0, 2, 3))
+
+    # Use convolution to compute backward pass
+    dx_conv_param = {
+        "stride": 1,
+        # NOTE: perform full convolution, assume square shaped kernel
+        "pad": HH - 1 - pad
+    }
+    fw = np.flip(w, axis=(2, 3))
+    tw = np.transpose(fw, (1, 0, 2, 3))
+    dx, _ = conv_forward_matmul(dout, tw, np.zeros((C,)), dx_conv_param)
+    assert dx.shape == x.shape
+
+    dw_conv_param = {
+      "stride": stride,
+      "pad": pad,
+    }
+
+    # NOTE: Flip the input and output channels for input and gradient
+    # N, F, H, W -> F, N, H, W
+    x = x.transpose((1, 0, 2, 3))
+    # N, F, H', W' -> F, N, H', W'
+    dout = dout.transpose((1, 0, 2, 3))
+    tw, _ = conv_forward_matmul(x, dout, np.zeros((F,)), dw_conv_param)
+    dw = tw.transpose((1, 0, 2, 3))
+    assert dw.shape == w.shape
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
