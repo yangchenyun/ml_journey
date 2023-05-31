@@ -414,7 +414,7 @@ def compute_gradient_of_variables(output_tensor, out_grad):
         assert grads_list, f"WARNING: no grads: {grads_list}"
         assert all(grads_list[0].shape == g.shape for g in grads_list)
 
-        node.grad = reduce(lambda a, b: a + b, grads_list)
+        node.grad = functools.reduce(lambda a, b: a + b, grads_list)
 
         if node.op is None:  # leaf node
             assert len(node.inputs) == 0, "Expect leaf node to have length 0"

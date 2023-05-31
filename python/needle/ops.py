@@ -13,18 +13,18 @@ import numpy
 import numpy as array_api
 
 class ArgMax(TensorOp):
-    def __init__(self, axis: Optional[int] = None):
-        self.axis = axis
+    def __init__(self, axes: Optional[int] = None):
+        self.axes = axes
 
     def compute(self, a: NDArray):
-        return array_api.argmax(a, axis=self.axis)
+        return array_api.argmax(a, axes=self.axes)
 
     def gradient(self, out_grad: Tensor, node: Tensor):
         raise NotImplementedError("Argmax gradient not implemented yet.")
 
 
-def argmax(a, axis=None):
-    return ArgMax(axis)(a)
+def argmax(a, axes=None):
+    return ArgMax(axes)(a)
 
 class Mean(TensorOp):
     pass
