@@ -7,42 +7,41 @@ import numpy as np
 np.random.seed(0)
 
 
-
-def ConvBN(in_channels, out_channels, kernel_size, stride, device=None):
+def DefaultConvBN(in_channels, out_channels, kernel_size, stride, device=None, activation=nn.ReLU):
     modules = [
         nn.Conv(in_channels, out_channels, kernel_size, stride,
                 device=device, dtype="float32"),
         # Feature dimension which is the output from last conv layer
         nn.BatchNorm2d(out_channels, device=device, dtype="float32"),
-        nn.ReLU()]
+        activation()]
     return nn.Sequential(*modules)
 
 
 class ResNet9(ndl.nn.Module):
-    def __init__(self, device=None, dtype="float32"):
+    def __init__(self, device=None, dtype="float32", ConvBN=DefaultConvBN, activation=nn.ReLU):
         super().__init__()
         ### BEGIN YOUR SOLUTION ###
         self.model = nn.Sequential(
             # prep
-            ConvBN(3, 16, 7, 4, device=device),
+            ConvBN(3, 16, 7, 4, device=device, activation=activation),
             # layer 1
-            ConvBN(16, 32, 3, 2, device=device),
+            ConvBN(16, 32, 3, 2, device=device, activation=activation ),
             nn.Residual(nn.Sequential(
-                ConvBN(32,32,3,1, device=device),
-                ConvBN(32,32,3,1, device=device),
+                ConvBN(32,32,3,1, device=device, activation=activation ),
+                ConvBN(32,32,3,1, device=device, activation=activation ),
             )),
             # layer 2
-            ConvBN(32, 64, 3, 2, device=device),
+            ConvBN(32, 64, 3, 2, device=device, activation=activation ),
             # layer 3, (mistake in graph)
-            ConvBN(64, 128, 3, 2, device=device),
+            ConvBN(64, 128, 3, 2, device=device, activation=activation ),
             nn.Residual(nn.Sequential(
-                ConvBN(128,128,3,1, device=device),
-                ConvBN(128,128,3,1, device=device),
+                ConvBN(128,128,3,1, device=device, activation=activation ),
+                ConvBN(128,128,3,1, device=device, activation=activation ),
             )),
             # classifier
             nn.Flatten(),
             nn.Linear(128, 128, device=device),
-            nn.ReLU(),
+            activation(),
             nn.Linear(128, 10, device=device)
         )
         ### END YOUR SOLUTION
