@@ -128,6 +128,17 @@ class ReLU(Module):
     def forward(self, x: Tensor) -> Tensor:
         return x.relu()
 
+class LeakyReLU(Module):
+    def forward(self, x: Tensor) -> Tensor:
+        return ops.leaky_relu(x)
+
+class ELU(Module):
+    def forward(self, x: Tensor) -> Tensor:
+        return ops.elu(x)
+
+class SeLU(Module):
+    def forward(self, x: Tensor) -> Tensor:
+        return ops.selu(x)
 
 class Tanh(Module):
     def forward(self, x: Tensor) -> Tensor:
