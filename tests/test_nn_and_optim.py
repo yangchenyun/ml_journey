@@ -1,13 +1,12 @@
 import sys
 sys.path.append("./python")
+import pytest
 import numpy as np
 import needle as ndl
 import needle.nn as nn
 
 sys.path.append("./apps")
 from mlp_resnet import *
-
-import mugrade
 
 """Deterministically generate a matrix"""
 def get_tensor(*shape, entropy=1):
@@ -282,13 +281,13 @@ def power_scalar_backward(shape, power=2):
 
 def logsumexp_forward(shape, axes):
     x = get_tensor(*shape)
-    return (ndl.ops.logsumexp(x,axes=axes)).cached_data
+    return (ndl.ops.logsumexp(x,axes=axes)).numpy()
 
 def logsumexp_backward(shape, axes):
     x = get_tensor(*shape)
     y = (ndl.ops.logsumexp(x, axes=axes)**2).sum()
     y.backward()
-    return x.grad.cached_data
+    return x.grad.numpy()
 
 
 def dropout_forward(shape, prob=0.5):
@@ -407,7 +406,7 @@ def test_op_logsumexp_forward_4():
 
 def test_op_logsumexp_forward_5():
     test_data = ndl.ops.logsumexp(ndl.Tensor(np.array([[1e10,1e9,1e8,-10],[1e-10,1e9,1e8,-10]])), (0,)).numpy()
-    np.testing.assert_allclose(test_data,np.array([ 1.00000000e+10,  1.00000000e+09,  1.00000001e+08, -9.30685282e+00]), rtol=1e-5, atol=1e-5)
+    np.testing.assert_allclose(test_data, np.array([ 1.00000000e+10,  1.00000000e+09,  1.00000001e+08, -9.30685282e+00]), rtol=1e-5, atol=1e-5)
 
 def test_op_logsumexp_backward_1():
     np.testing.assert_allclose(logsumexp_backward((3,1), (1,)),
@@ -444,29 +443,6 @@ def test_op_logsumexp_backward_3():
         [0.12704718, 2.820187  , 0.06308978],
         [3.9397335 , 0.19614778, 3.9397335 ]]], dtype=np.float32), rtol=1e-5, atol=1e-5)
 
-def test_op_logsumexp_backward_5():
-    grad_compare = ndl.Tensor(np.array([[1e10,1e9,1e8,-10],[1e-10,1e9,1e8,-10]]))
-    test_data = (ndl.ops.logsumexp(grad_compare, (0,))**2).sum().backward()
-    np.testing.assert_allclose(grad_compare.grad.cached_data,np.array([[ 2.00000000e+10,  9.99999999e+08,  1.00000001e+08,
-        -9.30685282e+00],
-       [ 0.00000000e+00,  9.99999999e+08,  1.00000001e+08,
-        -9.30685282e+00]]), rtol=1e-5, atol=1e-5)
-
-
-def submit_op_logsumexp():
-    mugrade.submit(logsumexp_forward((2,2,2), None))
-    mugrade.submit(logsumexp_forward((1,2,3), (0,)))
-    mugrade.submit(logsumexp_forward((2,3,3),(1,2)))
-    mugrade.submit(logsumexp_forward((1,2,2,2,2), (1,2,3,4)))
-    mugrade.submit(logsumexp_forward((1,2,2,2,2), (0,1,3)))
-    mugrade.submit(logsumexp_backward((2,2,2), None))
-    mugrade.submit(logsumexp_backward((1,2,3), (0,)))
-    mugrade.submit(logsumexp_backward((2,3,3),(1,2)))
-    mugrade.submit(logsumexp_backward((1,2,2,2,2), (1,2,3,4)))
-    mugrade.submit(logsumexp_backward((1,2,2,2,2), (0,1,3)))
-
-
-
 def test_op_logsumexp_backward_4():
     np.testing.assert_allclose(logsumexp_backward((1,2,3,4), None),
         np.array([[[[0.96463485, 1.30212122, 0.09671321, 1.84779774],
@@ -478,11 +454,27 @@ def test_op_logsumexp_backward_4():
          [0.75125862, 0.26289377, 0.04802637, 0.03932065]]]], dtype=np.float32), rtol=1e-5, atol=1e-5)
 
 
+def test_op_logsumexp_backward_5():
+    grad_compare = ndl.Tensor(np.array([[1e10,1e9,1e8,-10],[1e-10,1e9,1e8,-10]]))
+    test_data = (ndl.ops.logsumexp(grad_compare, (0,))**2).sum().backward()
+    np.testing.assert_allclose(grad_compare.grad.numpy(),np.array([[ 2.00000000e+10,  9.99999999e+08,  1.00000001e+08,
+        -9.30685282e+00],
+       [ 0.00000000e+00,  9.99999999e+08,  1.00000001e+08,
+        -9.30685282e+00]]), rtol=1e-5, atol=1e-5)
 
 
-
-
-
+def submit_op_logsumexp():
+    import mugrade
+    mugrade.submit(logsumexp_forward((2,2,2), None))
+    mugrade.submit(logsumexp_forward((1,2,3), (0,)))
+    mugrade.submit(logsumexp_forward((2,3,3),(1,2)))
+    mugrade.submit(logsumexp_forward((1,2,2,2,2), (1,2,3,4)))
+    mugrade.submit(logsumexp_forward((1,2,2,2,2), (0,1,3)))
+    mugrade.submit(logsumexp_backward((2,2,2), None))
+    mugrade.submit(logsumexp_backward((1,2,3), (0,)))
+    mugrade.submit(logsumexp_backward((2,3,3),(1,2)))
+    mugrade.submit(logsumexp_backward((1,2,2,2,2), (1,2,3,4)))
+    mugrade.submit(logsumexp_backward((1,2,2,2,2), (0,1,3)))
 
 def test_init_kaiming_uniform():
     np.random.seed(42)
@@ -521,6 +513,7 @@ def test_init_xavier_normal():
 
 def submit_init():
     np.random.seed(0)
+    import mugrade
     mugrade.submit(ndl.init.kaiming_normal(2,5).numpy())
     mugrade.submit(ndl.init.kaiming_uniform(2,5).numpy())
     mugrade.submit(ndl.init.xavier_uniform(2,5, gain=0.33).numpy())
