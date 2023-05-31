@@ -86,6 +86,27 @@ def argmax(a, axis=None):
     return ArgMax(axis)(a)
 
 
+class Max(TensorOp):
+    """ Not tested."""
+    def __init__(self, axes: Optional[int] = None):
+        self.axes = axes
+
+    def compute(self, a: NDArray):
+        return array_api.max(a, axes=self.axes)
+
+    def gradient(self, out_grad: Tensor, node: Tensor):
+        a = node.inputs[0]
+        ai = argmax(a, self.axes)
+        da = array_like.zeros_like(a.shape)
+        da[ai] = 1  # Only the max element has gradient 1
+        da = needle.Tensor(da)
+        return (out_grad * da,)
+
+
+def max(a, axes=None):
+    return Max(axes)(a)
+
+
 class EWiseAdd(TensorOp):
     def compute(self, a: NDArray, b: NDArray):
         return a + b
@@ -420,7 +441,7 @@ class LogSumExp(TensorOp):
 
 
     def compute(self, Z):
-        maxZ = array_api.amax(Z, axis=self.axes)
+        maxZ = array_api.max(Z, axis=self.axes)
         new_shape = self.restore_shape(Z)
         return array_api.log(
             array_api.sum(
@@ -439,7 +460,7 @@ class LogSumExp(TensorOp):
         """
         input = node.inputs[0].realize_cached_data()
 
-        max_in = array_api.amax(input, axis=self.axes)
+        max_in = array_api.max(input, axis=self.axes)
         input_exp = array_api.exp(input - max_in.reshape(self.restore_shape(input)))
 
         input_exp_sum = array_api.sum(input_exp, axis=self.axes)
