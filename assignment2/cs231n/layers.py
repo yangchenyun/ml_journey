@@ -455,7 +455,20 @@ def layernorm_forward(x, gamma, beta, ln_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    # Transform the input x
+    N, D = x.shape
+
+    x_mean = 1 / D * x.sum(1, keepdims=True)
+    x_diff = x - x_mean
+    x_diff2 = x_diff**2
+    x_var = (
+        1 / D * (x_diff2).sum(1, keepdims=True)  # NOTE: Why use D instead of D - 1 here
+    )  # note: Bessel's correction (dividing by n-1, not n)
+    x_var_inv = (x_var + eps) ** -0.5
+    x_hat = x_diff * x_var_inv
+    out = x_hat * gamma + beta
+
+    cache = gamma, x_var, x_diff, x_mean, x_hat, eps
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
