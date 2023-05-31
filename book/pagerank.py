@@ -19,13 +19,13 @@ import sys
 import struct
 import array
 
-from mat import Mat
-import porter_stemming
+from book.mat import Mat
+from nltk.stem import PorterStemmer
 
 _little_endian = (struct.unpack('<i', struct.pack('=i', 1))[0] == 1)
-_pstem = porter_stemming.PorterStemmer()
+_pstem = PorterStemmer()
 
-data = ''
+data = './book'
 if not os.path.exists(data):
     data = 'data'
 
@@ -80,7 +80,7 @@ def find_word(w):
     global _wordindex
     global _pstem
 
-    wstem = _pstem.stem(w, 0, len(w)-1)
+    wstem = _pstem.stem(w)
     indices = _get_titles(os.path.join(data, 'inverseindex'), wstem)
     return [titles[i] for i in indices] if indices else []
 
@@ -95,4 +95,3 @@ def read_data(verbose=True):
     links = _read_linkmat(os.path.join(data, "links.bin"), verbose)
     if verbose: print("Done")
     return links
-

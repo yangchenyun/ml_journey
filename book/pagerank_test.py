@@ -1,4 +1,4 @@
-from mat import Mat
+from book.mat import Mat
 #test case
 D = set(range(1,7))
 f = [(1,1),(1,4),(2,3),(2,4),(2,5),(2,6),(3,2),(4,5),(5,6),(6,5)]

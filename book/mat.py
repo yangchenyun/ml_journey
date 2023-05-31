@@ -238,6 +238,9 @@ class Mat:
     __setitem__ = setitem
     transpose = transpose
 
+    @property
+    def T(self): return self.transpose()
+
     def __neg__(self):
         return (-1)*self
 
