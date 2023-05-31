@@ -877,8 +877,10 @@ class JointParticleFilter(ParticleFilter):
 
     def _elapseTime(self, gameState):
         """
-        Sample each particle's next state based on its current state and the
-        gameState.
+        This method calculates next tuples of ghost positions, and union all the probability.
+        It then samples on top of the unioned probability.
+
+        In graphic UI, it converges well, but it doesn't pass the test.
         """
         prior = self.getBeliefDistribution()
         # Distribution for each ghost's position
