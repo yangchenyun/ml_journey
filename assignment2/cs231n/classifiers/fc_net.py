@@ -84,7 +84,7 @@ class FullyConnectedNet(object):
             self.params[f"W{i}"] = np.random.normal(0, weight_scale, (fan_in, fan_out))
             self.params[f"b{i}"] = np.zeros((1, fan_out))
 
-            if self.normalization == "batchnorm":
+            if self.normalization == "batchnorm" or self.normalization == "layernorm":
                 if i != self.num_layers:
                     self.params[f"gamma{i}"] = np.ones((1, fan_out))
                     self.params[f"beta{i}"] = np.zeros((1, fan_out))
@@ -112,7 +112,7 @@ class FullyConnectedNet(object):
         if self.normalization == "batchnorm":
             self.bn_params = [{"mode": "train"} for i in range(self.num_layers - 1)]
         if self.normalization == "layernorm":
-            self.bn_params = [{} for i in range(self.num_layers - 1)]
+            self.ln_params = [{} for i in range(self.num_layers - 1)]
 
         # Cast all parameters to the correct datatype.
         for k, v in self.params.items():
@@ -168,6 +168,7 @@ class FullyConnectedNet(object):
 
         affine_cache = {}
         bn_cache = {}
+        ln_cache = {}
         relu_cache = {}
         dropout_cache = {}
 
@@ -194,7 +195,12 @@ class FullyConnectedNet(object):
                     self.bn_params[i - 1],
                 )
             elif self.normalization == "layernorm":
-                pass
+                outputs[i], ln_cache[i] = layernorm_forward(
+                    outputs[i],
+                    self.params[f"gamma{i}"],
+                    self.params[f"beta{i}"],
+                    self.ln_params[i - 1],
+                )
 
             outputs[i], relu_cache[i] = relu_forward(outputs[i])
 
@@ -269,7 +275,11 @@ class FullyConnectedNet(object):
                         grads[f"beta{i}"],
                     ) = batchnorm_backward_alt(output_grads[f"Out{i+1}"], bn_cache[i])
                 elif self.normalization == "layernorm":
-                    pass
+                    (
+                        output_grads[f"Out{i+1}"],
+                        grads[f"gamma{i}"],
+                        grads[f"beta{i}"],
+                    ) = layernorm_backward(output_grads[f"Out{i+1}"], ln_cache[i])
 
             # X_i^T @ W_i + b_i = Out_i
             # (N, fan_in) @ (fan_in, fan_out) + (1, fan_out) = (N, fan_out)
