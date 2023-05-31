@@ -66,31 +66,32 @@ class RandomScale:
         Randomly scale an image preserving the original shape.
 
         Args:
-            img (np.ndarray): Original image in the shape (C, H, W).
+            img (np.ndarray): Original image in the shape (H, W, C).
 
         Returns:
-            np.ndarray: Scaled image in the shape (C, H, W).
+            np.ndarray: Scaled image in the shape (H, W, C).
         """
         scale_factor = np.random.uniform(low=self.scale_range[0], high=self.scale_range[1])
-        c, h, w = img.shape  # Fix this line
+        h, w, c = img.shape
 
         # Use scipy's zoom function for resizing
-        img_resized = zoom(img, (1, scale_factor, scale_factor))
+        img_resized = zoom(img, (scale_factor, scale_factor, 1))
 
-        new_c, new_h, new_w = img_resized.shape  # Fix this line
+        new_h, new_w, _ = img_resized.shape
 
         # If the scale factor is less than 1, we need to pad the image
         if scale_factor < 1:
             pad_h = (h - new_h) // 2
             pad_w = (w - new_w) // 2
-            img_padded = np.pad(img_resized, ((0, 0), (pad_h, h - new_h - pad_h), (pad_w, w - new_w - pad_w)), mode='constant')
+            img_padded = np.pad(img_resized, ((pad_h, h - new_h - pad_h), (pad_w, w - new_w - pad_w), (0, 0)), mode='constant')
         # If the scale factor is greater than 1, we need to crop the image
         else:
             crop_h = (new_h - h) // 2
             crop_w = (new_w - w) // 2
-            img_padded = img_resized[:, crop_h:crop_h+h, crop_w:crop_w+w]
+            img_padded = img_resized[crop_h:crop_h+h, crop_w:crop_w+w, :]
 
         assert img_padded.shape == img.shape, "Scaling should preserve the original shape"
+
         return img_padded
 
 
@@ -345,6 +346,8 @@ class CIFAR10Dataset(Dataset):
         X - numpy array of images
         y - numpy array of labels
         """
+        self.transforms = transforms
+
         training_files = [os.path.join(base_folder, f'data_batch_{batch}') for batch in range(1, 6)]
         test_files = [os.path.join(base_folder, 'test_batch')]
         self.X, self.Y = read_cifar_10(training_files if train else test_files)
