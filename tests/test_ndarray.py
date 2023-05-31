@@ -88,10 +88,10 @@ def test_compact(params, device):
 
 
 reduce_params = [
-    {"dims": (10,), "axis": 0},
+    {"dims": (16,), "axis": 0},
     {"dims": (4, 5, 6), "axis": 0},
-    {"dims": (4, 5, 6), "axis": 1},
-    {"dims": (4, 5, 6), "axis": 2}
+    {"dims": (4, 8, 6), "axis": 1},
+    {"dims": (4, 5, 8), "axis": 2}
 ]
 @pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda", "triton"])
 @pytest.mark.parametrize("params", reduce_params)
