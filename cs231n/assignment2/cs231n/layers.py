@@ -735,7 +735,7 @@ def conv_forward_matmul(x, w, b, conv_param):
     W_prime = (W + 2 * pad - WW) // stride + 1
 
     # Approach #2 - As matrix multiplication
-    padded = padded.transpose((0, 2, 3, 1)) # N, C, H, W -> N, H', W', C
+    padded = padded.transpose((0, 2, 3, 1)) # N, C, H, W -> N, H, W, C
     w = w.transpose((2, 3, 1, 0)) # F, C, HH, WW -> HH, WW, C, F
 
     Ns,Hs,Ws,Cs = padded.strides
@@ -751,9 +751,23 @@ def conv_forward_matmul(x, w, b, conv_param):
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
+    out = np.ascontiguousarray(out)
     return out, cache
 
 
+def dilate(M, n, axes=(), border=True):
+  """Create a dilated copy of Matrix.
+
+  Border: bool, determines whether to add the padding at the border
+  """
+  new_shape = tuple([M.shape[i] * (n + 1) - (0 if border else 1) if i in axes else M.shape[i]
+                     for i in range(M.ndim)])
+  dilatedM = np.zeros(new_shape, dtype=M.dtype)
+  view = tuple([slice(None, None, n + 1) if i in axes else slice(None)
+                for i in range(M.ndim)])
+  dilatedM[view] = M
+  return dilatedM
+  
 def conv_backward_naive(dout, cache):
     """A naive implementation of the backward pass for a convolutional layer.
 
@@ -780,19 +794,24 @@ def conv_backward_naive(dout, cache):
 
     db = dout.sum(axis=(0, 2, 3))
 
+    if stride > 1:
+      # NOTE: dilate would already add a padding at the last layer
+      dout = dilate(dout, stride - 1, axes=(2, 3), border=False)
+
     # Use convolution to compute backward pass
     dx_conv_param = {
         "stride": 1,
         # NOTE: perform full convolution, assume square shaped kernel
         "pad": HH - 1 - pad,
     }
+
     fw = np.flip(w, axis=(2, 3))
     tw = np.transpose(fw, (1, 0, 2, 3))
     dx, _ = conv_forward_matmul(dout, tw, np.zeros((C,)), dx_conv_param)
     assert dx.shape == x.shape, f"dx.shape={dx.shape}, x.shape={x.shape}"
 
     dw_conv_param = {
-      "stride": stride,
+      "stride": 1,
       "pad": pad,
     }
 
@@ -803,7 +822,7 @@ def conv_backward_naive(dout, cache):
     dout = dout.transpose((1, 0, 2, 3))
     tw, _ = conv_forward_matmul(x, dout, np.zeros((F,)), dw_conv_param)
     dw = tw.transpose((1, 0, 2, 3))
-    assert dw.shape == w.shape
+    assert dw.shape == w.shape, "dw.shape={}, w.shape={}".format(dw.shape, w.shape)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
