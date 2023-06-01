@@ -784,12 +784,12 @@ def conv_backward_naive(dout, cache):
     dx_conv_param = {
         "stride": 1,
         # NOTE: perform full convolution, assume square shaped kernel
-        "pad": HH - 1 - pad
+        "pad": HH - 1 - pad,
     }
     fw = np.flip(w, axis=(2, 3))
     tw = np.transpose(fw, (1, 0, 2, 3))
     dx, _ = conv_forward_matmul(dout, tw, np.zeros((C,)), dx_conv_param)
-    assert dx.shape == x.shape
+    assert dx.shape == x.shape, f"dx.shape={dx.shape}, x.shape={x.shape}"
 
     dw_conv_param = {
       "stride": stride,
@@ -838,13 +838,62 @@ def max_pool_forward_naive(x, pool_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, C, H, W = x.shape
+    HH = pool_param["pool_height"]
+    WW = pool_param["pool_width"]
+    stride = pool_param["stride"]
+    pad = 0
+    H_prime = (H + 2 * pad - HH) // stride + 1
+    W_prime = (W + 2 * pad - WW) // stride + 1
+
+    # Approach #1 - with explicit loops
+    out = np.zeros((N, C, H_prime, W_prime))
+    # For every input n ∈ N, apply pooling over all C channels
+    for n in range(N):
+      for h_i in range(H_prime):
+        for w_i in range(W_prime):
+          out[n, :, h_i, w_i] = np.max(
+              x[n, :, h_i * stride: h_i * stride + HH, w_i * stride: w_i * stride + WW], axis=(1, 2)
+          )
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
     cache = (x, pool_param)
+    return out, cache
+
+
+def max_pool_forward_matmul(x, pool_param):
+    """A fast implementation of the forward pass for a max-pooling layer."""
+    out = None
+    ###########################################################################
+    # TODO: Implement the convolutional forward pass.                         #
+    # Hint: you can use the function np.pad for padding.                      #
+    ###########################################################################
+    # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    cache = (x, pool_param)
+
+    N, C, H, W = x.shape
+    HH = pool_param["pool_height"]
+    WW = pool_param["pool_width"]
+    stride = pool_param["stride"]
+    pad = 0
+    H_prime = (H + 2 * pad - HH) // stride + 1
+    W_prime = (W + 2 * pad - WW) // stride + 1
+
+    # NOTE: No transpose needed for maxpooling
+    Ns,Cs,Hs,Ws = x.strides
+    conv_strides = (Ns, Cs, Hs*stride, Ws*stride, Hs, Ws)
+    conv_shape = (N, C, H_prime, W_prime, HH, WW)
+    conved = np.lib.stride_tricks.as_strided(x, shape=conv_shape, strides=conv_strides)
+    out = np.zeros((N, C, H_prime, W_prime))
+    conved.max(axis=(4, 5), out=out)  # NOTE: max pooling over the last two dimensions
+
+    # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    ###########################################################################
+    #                             END OF YOUR CODE                            #
+    ###########################################################################
     return out, cache
 
 
@@ -863,8 +912,30 @@ def max_pool_backward_naive(dout, cache):
     # TODO: Implement the max-pooling backward pass                           #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    x, pool_param = cache
 
-    pass
+    N, C, H, W = x.shape
+    HH = pool_param["pool_height"]
+    WW = pool_param["pool_width"]
+    stride = pool_param["stride"]
+    pad = 0
+    H_prime = (H + 2 * pad - HH) // stride + 1
+    W_prime = (W + 2 * pad - WW) // stride + 1
+
+    # The out gradient should be passed to the input value which is being pooled
+    dx = np.zeros_like(x)
+    for n in range(N):
+      for h_i in range(H_prime):
+        for w_i in range(W_prime):
+          for c in range(C):
+            pooled_index = np.argmax(
+                x[n, c, 
+                  h_i * stride: h_i * stride + HH, 
+                  w_i * stride: w_i * stride + WW]
+            )
+            index_2d = np.unravel_index(pooled_index, (HH, WW))
+            index_2d_offset = (index_2d[0] + h_i * stride, index_2d[1] + w_i * stride)
+            dx[n, c, index_2d_offset[0], index_2d_offset[1]] = dout[n, c, h_i, w_i]
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
