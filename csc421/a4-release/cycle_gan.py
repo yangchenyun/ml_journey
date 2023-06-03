@@ -19,10 +19,8 @@
 ######################################################################
 # Setup python environment and change the current working directory
 ######################################################################
-get_ipython().system('pip install torch torchvision')
-get_ipython().system('pip install Pillow==4.0.0')
-get_ipython().run_line_magic('mkdir', '-p /content/csc421/a4/')
-get_ipython().run_line_magic('cd', '/content/csc421/a4')
+# !pip install torch torchvision
+# !pip install Pillow==4.0.0
 
 
 # # Helper code
@@ -59,7 +57,7 @@ import tarfile
 import pickle
 import sys
 import scipy
-import scipy.misc
+import imageio
 
 def get_file(fname,
              origin,
@@ -111,7 +109,7 @@ class AttrDict(dict):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
         
-def to_var(tensor, cuda=True):
+def to_var(tensor):
     """Wraps a Tensor in a Variable, optionally placing it on the GPU.
 
         Arguments:
@@ -121,7 +119,7 @@ def to_var(tensor, cuda=True):
         Returns:
             A Variable object, on the GPU if cuda==True.
     """
-    if cuda:
+    if torch.cuda.is_available():
         return Variable(tensor.cuda())
     else:
         return Variable(tensor)
@@ -225,10 +223,10 @@ def gan_save_samples(G, fixed_noise, iteration, opts):
 
     grid = create_image_grid(generated_images)
 
+
     # merged = merge_images(X, fake_Y, opts)
     path = os.path.join(opts.sample_dir, 'sample-{:06d}.png'.format(iteration))
-    scipy.misc.imsave(path, grid)
-    print('Saved {}'.format(path))
+    imageio.imsave(path, (grid * 255).astype(np.uint8))
 
 def cyclegan_save_samples(iteration, fixed_Y, fixed_X, G_YtoX, G_XtoY, opts):
     """Saves samples from both generators X->Y and Y->X.
@@ -241,12 +239,12 @@ def cyclegan_save_samples(iteration, fixed_Y, fixed_X, G_YtoX, G_XtoY, opts):
 
     merged = merge_images(X, fake_Y, opts)
     path = os.path.join(opts.sample_dir, 'sample-{:06d}-X-Y.png'.format(iteration))
-    scipy.misc.imsave(path, merged)
+    imageio.imsave(path, grid)
     print('Saved {}'.format(path))
 
     merged = merge_images(Y, fake_X, opts)
     path = os.path.join(opts.sample_dir, 'sample-{:06d}-Y-X.png'.format(iteration))
-    scipy.misc.imsave(path, merged)
+    imageio.imsave(path, grid)
     print('Saved {}'.format(path))
 
 
@@ -259,7 +257,7 @@ def get_emoji_loader(emoji_type, opts):
     """Creates training and test data loaders.
     """
     transform = transforms.Compose([
-                    transforms.Scale(opts.image_size),
+                    transforms.Resize(opts.image_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
                 ])
@@ -482,7 +480,7 @@ class DCGenerator(nn.Module):
         out = F.relu(self.linear_bn(z)).view(-1, self.conv_dim*4, 4, 4)    # BS x 128 x 4 x 4
         out = F.relu(self.upconv1(out))  # BS x 64 x 8 x 8
         out = F.relu(self.upconv2(out))  # BS x 32 x 16 x 16
-        out = F.tanh(self.upconv3(out))  # BS x 3 x 32 x 32
+        out = torch.tanh(self.upconv3(out))  # BS x 3 x 32 x 32
         
         out_size = out.size()
         if out_size != torch.Size([batch_size, 3, 32, 32]):
@@ -680,7 +678,7 @@ class CycleGenerator(nn.Module):
         out = F.relu(self.resnet_block(out))   # BS x 64 x 8 x 8
 
         out = F.relu(self.upconv1(out))        # BS x 32 x 16 x 16
-        out = F.tanh(self.upconv2(out))        # BS x 3 x 32 x 32
+        out = torch.tanh(self.upconv2(out))        # BS x 3 x 32 x 32
         
         out_size = out.size()
         if out_size != torch.Size([batch_size, 3, 32, 32]):
@@ -719,8 +717,8 @@ def cyclegan_training_loop(dataloader_X, dataloader_Y, test_dataloader_X, test_d
 
     # Get some fixed data from domains X and Y for sampling. These are images that are held
     # constant throughout training, that allow us to inspect the model's performance.
-    fixed_X = to_var(test_iter_X.next()[0])
-    fixed_Y = to_var(test_iter_Y.next()[0])
+    fixed_X = to_var(next(test_iter_X)[0])
+    fixed_Y = to_var(next(test_iter_Y)[0])
 
     iter_per_epoch = min(len(iter_X), len(iter_Y))
 
@@ -732,10 +730,10 @@ def cyclegan_training_loop(dataloader_X, dataloader_Y, test_dataloader_X, test_d
               iter_X = iter(dataloader_X)
               iter_Y = iter(dataloader_Y)
 
-          images_X, labels_X = iter_X.next()
+          images_X, labels_X = next(iter_X)
           images_X, labels_X = to_var(images_X), to_var(labels_X).long().squeeze()
 
-          images_Y, labels_Y = iter_Y.next()
+          images_Y, labels_Y = next(iter_Y)
           images_Y, labels_Y = to_var(images_Y), to_var(labels_Y).long().squeeze()
 
 
