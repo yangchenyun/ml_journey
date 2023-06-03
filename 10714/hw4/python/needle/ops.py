@@ -696,3 +696,75 @@ class Conv(TensorOp):
 
 def conv(a, b, stride=1, padding=1):
     return Conv(stride, padding)(a, b)
+
+
+class ConvTranspose2d(TensorOp):
+    """
+    ConvTranspose is the 'gradient' of Convolution, the arguments follow torch convention.
+
+    Args:
+        stride: stride of the convolution which produces this input
+        padding: padding of the convolution which produces this input
+    """
+    def __init__(self, stride: Optional[int] = 1, padding: Optional[int] = 0):
+        self.stride = stride or 1
+        self.padding = padding or 0
+
+    def compute(self, Z, W):
+        _,Ho,Wo,_ = Z.shape  # output shape from convolution
+        K = W.shape[0]
+        P = self.padding
+        S = self.stride
+
+        revP = K-1-P
+        if S > 1:
+            Z = array_api.dilate(Z, (1,2), S - 1)
+
+        _,Hz,Wz,_ = Z.shape
+        Hi = Hz + 2 * revP - K + 1
+        Wi = Wz + 2 * revP - K + 1
+        assert (Hi + 2 * P - K)//S + 1 == Ho, f"Expect shape to match between conv and convTranspose, got {Hi}, {P}, {K}, {S} -> {Ho}"
+        assert (Wi + 2 * P - K)//S + 1 == Wo, f"Expect shape to match between conv and convTranspose, got {Wi}, {P}, {K}, {S} -> {Wo}"
+
+        # NOTE: A represents the number of zeros needed to add to the bottom and right edges of the input image
+        a = (Hi + 2 * P - K) % S
+        if a > 0:
+            Z = Z.pad(((0, 0), (0, a), (0, a), (0, 0)))
+
+        # Perform a full convolution with transposed kernel
+        # flip kernel dimensions
+        # swap C_in and C_out
+        # dW: K,K,C_in,C_out -> K,K,C_out,C_in
+
+        # NOTE: Convert to Tensor to reuse the code defined above.
+        Wt = Tensor(W, device=W.device); Wt.requires_grad = False
+        Zt = Tensor(Z, device=Z.device); Zt.requires_grad = False
+
+        fW = flip(Wt, (0, 1))
+        out = conv(Zt, transpose(fW, (2, 3)), padding=revP)
+
+        return out.realize_cached_data()
+
+    def gradient(self, out_grad, node):
+        Z, W = node.inputs
+        # N,H,W,C_in = Z.shape
+        # K,_,_,C_out = W.shape
+        P = self.padding
+        S = self.stride
+
+        dZ = conv(out_grad, W, stride=S, padding=P)
+        assert dZ.shape == Z.shape, f"Expect shape to match between conv and convTranspose, got {dZ.shape} vs {Z.shape}"
+
+        # FIXME: A wild guess, not working yet,
+        dW = Tensor(array_api.empty(W.shape), dtype=W.dtype, device=W.device)
+        # tZ = transpose(Z, (0, 3))
+        # tOut_grad = transpose(transpose(out_grad, (0, 2)), (0, 1))
+        # tW = convTranspose2d(tZ, tOut_grad, stride=S) # apply the same padding as in forward pass
+        # dW = transpose(transpose(tW, (0, 2)), (0, 1))
+        # assert dW.shape == W.shape, f"Expect shape to match between conv and convTranspose, got {dW.shape} vs {W.shape}"
+
+        return dZ, dW
+
+
+def convTranspose2d(a, b, stride=1, padding=1):
+    return ConvTranspose2d(stride, padding)(a, b)

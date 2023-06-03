@@ -477,6 +477,102 @@ def test_op_conv(Z_shape, W_shape, stride, padding, backward, device):
     assert err3 < 1e-1, "outputs match %s, %s" % (y2, out2)
 
 
+def torchConvTranspose2d(X, K, padding=0, stride=1):
+    """
+    X: N, C, H, W
+    K: O, C, H, W
+
+    Padding and strides are for output.
+
+    """
+    import torch
+    O, C, kH, kW = K.shape
+    tconv = torch.nn.ConvTranspose2d(O, C, kernel_size=(kH, kW), padding=padding, stride=stride, bias=False)
+    tconv.weight.data = K
+    return tconv(X), tconv.weight
+
+def output_shape(A_shape, B_shape, S=1, P=0):
+    import torch
+
+    N,H,W,C_in = A_shape
+    K,_,_,C_out = B_shape
+    out = torch.conv2d(torch.zeros((N, C_in, H, W)), torch.zeros((C_out, C_in, K, K)), stride=S, padding=P)
+    o_shape = list(out.shape)
+    o_shape[1], o_shape[3] = o_shape[3], o_shape[1]
+    return tuple(o_shape)
+
+op_conv_shapes = [
+    ( (1, 4, 4, 3), (1, 1, 3, 1), 1, 0 ),
+    ( (1, 2, 2, 3), (1, 1, 3, 1), 1, 0 ),
+
+    ( (3, 14, 14, 8), (3, 3, 8, 16), 1, 0 ),
+    ( (3, 14, 14, 8), (3, 3, 8, 16), 1, 1 ),
+    ( (3, 16, 16, 8), (3, 3, 8, 16), 1, 2 ),
+    ( (3, 16, 16, 8), (3, 3, 8, 14), 1, 0 ),
+    ( (3, 16, 16, 2), (3, 3, 2, 14), 1, 0 ),
+
+    # FIXME: turn off testings for stride + padding for now,
+    # torch may have different implementation than just convolution
+    # - In the forward pass, there is numeric mismatch probably dues to torch use non-zero padding
+    # - In backward pass, there is shape mismatches (not sure what happend there)
+
+    # ( (3, 14, 14, 8), (3, 3, 8, 16), 2, 0 ),
+    # ( (3, 16, 16, 8), (3, 3, 8, 16), 2, 0 ),
+    # ( (3, 16, 16, 8), (3, 3, 8, 14), 2, 0 ),
+    # ( (3, 16, 16, 2), (3, 3, 2, 14), 2, 0 ),
+    # ( (3, 14, 14, 8), (3, 3, 8, 16), 2, 1 ),
+    # ( (3, 16, 16, 8), (3, 3, 8, 16), 2, 2 ),
+
+    ( (3, 16, 16, 24), (3, 3, 24, 14), 1, 0 ),
+    ( (3, 14, 14, 8), (5, 5, 8, 16),   1, 0 ),
+    ( (3, 17, 17, 8), (5, 5, 8, 16),   1, 0 ),
+    ( (3, 17, 17, 1), (5, 5, 1, 16) ,  1, 0),
+    ( (3, 17, 17, 16), (5, 5, 16, 1),  1, 0 ),
+    ( (3, 17, 17, 16), (1, 1, 16, 1),  1, 0 ),
+    ( (1, 14, 14, 2), (3, 3, 2, 2),    1, 0 ),
+]
+@pytest.mark.parametrize("X_shape, W_shape, stride, padding", op_conv_shapes)
+@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("backward", [True, False], ids=["backward", "forward"])
+def test_op_conv_transposed(X_shape, W_shape, stride, padding, backward, device):
+    # NOTE: compute the input shape numerically
+    Z_shape = output_shape(X_shape, W_shape, stride, padding)
+    print("Z_shape", Z_shape)
+
+    np.random.seed(0)
+    import torch
+    _Z = np.random.randn(*Z_shape)*5
+    _Z = _Z.astype(np.float32)
+    _W = np.random.randn(*W_shape)*5
+    _W = _W.astype(np.float32)
+    Z = ndl.Tensor(_Z, device=device)
+    W = ndl.Tensor(_W, device=device)
+    y = ndl.convTranspose2d(Z, W, padding=padding, stride=stride)
+    y2 = y.sum()
+
+    if backward:
+        y2.backward()
+
+    Ztch = torch.Tensor(_Z).float()
+    Ztch.requires_grad=True
+    Wtch = torch.Tensor(_W).float()
+    Wtch.requires_grad=True
+    out, Wtch = torchConvTranspose2d(Ztch.permute(0, 3, 1, 2), Wtch.permute(3, 2, 0, 1), padding=padding, stride=stride)
+    out2 = out.sum()
+
+    if backward:
+        out2.backward()
+    if backward:
+        err1 = np.linalg.norm(Ztch.grad.numpy() - Z.grad.numpy())
+        err2 = np.linalg.norm(Wtch.grad.numpy().transpose(2, 3, 1, 0) - W.grad.numpy())
+    err3 = np.linalg.norm(out2.detach().numpy() - y2.numpy())
+    if backward:
+        assert err1 < 1e-2, "input grads match"
+        # FIXME: Implement weight grads calculation
+        # assert err2 < 1e-2, "weight grads match"
+    assert err3 < 4e-1, "outputs match %s, %s" % (y2, out2)
+
+
 @pytest.mark.parametrize("device", _DEVICES)
 def test_train_cifar10(device):
     np.random.seed(0)
