@@ -9,7 +9,10 @@ The course offers a balance practice for engineering and mathmatical theory.
 
 - In `hw3`
   - Experimented with [triton](https://github.com/openai/triton) as a backend for `ndarray`
-  - Implemented coordinated fetching for `matmul` in the CUDA layer.
 
 - In `hw4`
-  - Added alternative activation functions.
+  - Implemented coordinated fetching for `matmul` in the CUDA layer, [source](./hw4/src/ndarray_backend_cuda.cu#L410)
+  - Added alternative activation functions, [source](./hw4/python/needle/ops.py#L407)
+  - [Implemented](https://github.com/yangchenyun/ml_journey/commit/f7a5aacfda5a04e98fb783d82597e84e51f089d0) `convTranspose` operation, 
+	  - passed forward tests for padding / strides
+	  - passed backward for unit strides (non-unit strides have shape issues)
