@@ -4,3 +4,6 @@
 tmp/
 **/datasets/**
 **/__pycache__
+**/build
+**/*.so
+**/*_cython.c
