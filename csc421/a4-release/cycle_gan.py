@@ -459,10 +459,13 @@ class DCGenerator(nn.Module):
         ##   FILL THIS IN: CREATE ARCHITECTURE   ##
         ###########################################
 
-        # self.linear_bn = upconv(...)
-        # self.upconv1 = upconv(...)
-        # self.upconv2 = upconv(...)
-        # self.upconv3 = upconv(...)
+        # NOTE: upconv, padding is padding of the transposed conv, not the original feature map. (Unlike py torch)
+        # Here, we manually calculat the padding needed.
+        # i*S - k + 2p + 1; p = [(o - i*S) + (k - 1)]/2
+        self.linear_bn = upconv(100, 128, 4, 1, 3)
+        self.upconv1 = upconv(128, 64, 5, 2, 2)
+        self.upconv2 = upconv(64, 32, 5, 2, 2)
+        self.upconv3 = upconv(32, 3, 5, 2, 2, batch_norm=False)
 
     def forward(self, z):
         """Generates an image given a sample of random noise.
@@ -504,18 +507,19 @@ class DCDiscriminator(nn.Module):
         ##   FILL THIS IN: CREATE ARCHITECTURE   ##
         ###########################################
 
-        # self.conv1 = conv(...)
-        # self.conv2 = conv(...)
-        # self.conv3 = conv(...)
-        # self.conv4 = conv(...)
-
+        # (i - k + 2p)/s + 1 = i/2
+        self.conv1 = conv(3, 32, 5, 2, 2)
+        self.conv2 = conv(32, 64, 5, 2, 2)
+        self.conv3 = conv(64, 128, 5, 2, 2)
+        self.conv4 = conv(128, 1, 4, 1, 0, batch_norm=False)  # As a linear layer
 
     def forward(self, x):
         batch_size = x.size(0)
 
-        out = F.relu(self.conv1(x))    # BS x 64 x 16 x 16
+                                       # BS x 3 x 32 x 32
+        out = F.relu(self.conv1(x))    # BS x 32 x 16 x 16
         out = F.relu(self.conv2(out))    # BS x 64 x 8 x 8
-        out = F.relu(self.conv3(out))    # BS x 64 x 4 x 4
+        out = F.relu(self.conv3(out))    # BS x 128 x 4 x 4
 
         out = self.conv4(out).squeeze()
         out_size = out.size()
@@ -563,26 +567,29 @@ def gan_training_loop(dataloader, test_dataloader, opts):
           if iteration % iter_per_epoch == 0:
               train_iter = iter(dataloader)
 
-          real_images, real_labels = train_iter.next()
+          # NOTE: real_labels are not used, manually assign 1 or 0
+          real_images, real_labels = next(train_iter)
           real_images, real_labels = to_var(real_images), to_var(real_labels).long().squeeze()
 
           d_optimizer.zero_grad()
 
+          m = real_images.shape[0]
           # FILL THIS IN
           # 1. Compute the discriminator loss on real images
-          # D_real_loss = ...
+          D_real_loss = torch.mean((D(real_images) - 1)**2)
 
           # 2. Sample noise
-          # noise = ...
+          noise_entries = torch.randint(100, (m,))  # Select 10 random entries
+          noise = fixed_noise[noise_entries]
 
           # 3. Generate fake images from the noise
-          # fake_images = ...
+          fake_images = G(noise)
 
           # 4. Compute the discriminator loss on the fake images
-          # D_fake_loss = ...          
+          D_fake_loss = torch.mean((D(fake_images) ** 2))          
 
           # 5. Compute the total discriminator loss
-          # D_total_loss = ...
+          D_total_loss = (D_real_loss + D_fake_loss)/2.0
 
           D_total_loss.backward()
           d_optimizer.step()
@@ -595,13 +602,14 @@ def gan_training_loop(dataloader, test_dataloader, opts):
 
           # FILL THIS IN
           # 1. Sample noise
-          # noise = ...
+          noise_entries = torch.randint(100, (m,))  # Select 10 random entries
+          noise = fixed_noise[noise_entries]
 
           # 2. Generate fake images from the noise
-          # fake_images = ...
+          fake_images = G(noise)
 
           # 3. Compute the generator loss
-          # G_loss = ...
+          G_loss = torch.mean((D(fake_images) - 1)**2)  # TODO: Do I need to manually turn 1 into a tensor?
           
           G_loss.backward()
           g_optimizer.step()
@@ -774,7 +782,6 @@ def cyclegan_training_loop(dataloader_X, dataloader_Y, test_dataloader_X, test_d
           d_fake_loss = D_X_loss + D_Y_loss
           d_fake_loss.backward()
           d_optimizer.step()
-
 
 
           # =========================================
@@ -951,7 +958,3 @@ G_XtoY, G_YtoX, D_X, D_Y = train(args)
 
 
 # In[ ]:
-
-
-
-
