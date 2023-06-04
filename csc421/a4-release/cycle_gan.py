@@ -218,7 +218,7 @@ def create_image_grid(array, ncols=None):
     return result
 
 def save_real_samples(images, batch_index, opts):
-    images = denormalize(images)
+    images = denormalize(opts.X, images)
     images = to_data(images)
     grid = create_image_grid(images)
     path = os.path.join(opts.sample_dir, 'real-image-{:06d}.png'.format(batch_index))
@@ -226,7 +226,7 @@ def save_real_samples(images, batch_index, opts):
 
 
 def gan_save_samples(G, fixed_noise, iteration, opts):
-    generated_images = denormalize(G(fixed_noise).detach())
+    generated_images = denormalize(opts.X, G(fixed_noise).detach())
     generated_images = to_data(generated_images)
 
     grid = create_image_grid(generated_images)
@@ -239,18 +239,23 @@ def cyclegan_save_samples(iteration, fixed_Y, fixed_X, G_YtoX, G_XtoY, opts):
     """
     fake_X = G_YtoX(fixed_Y)
     fake_Y = G_XtoY(fixed_X)
+    fake_X = denormalize(opts.X, fake_X)
+    fake_Y = denormalize(opts.Y, fake_Y)
+
+    fixed_X = denormalize(opts.X, fixed_X)
+    fixed_Y = denormalize(opts.Y, fixed_Y)
 
     X, fake_X = to_data(fixed_X), to_data(fake_X)
     Y, fake_Y = to_data(fixed_Y), to_data(fake_Y)
 
     merged = merge_images(X, fake_Y, opts)
-    path = os.path.join(opts.sample_dir, 'sample-{:06d}-X-Y.png'.format(iteration))
-    imageio.imsave(path, grid)
+    path = os.path.join(opts.sample_dir, 'sample-{:06d}-X-Y.jpg'.format(iteration))
+    imageio.imsave(path, (merged * 255).astype(np.uint8))
     print('Saved {}'.format(path))
 
     merged = merge_images(Y, fake_X, opts)
-    path = os.path.join(opts.sample_dir, 'sample-{:06d}-Y-X.png'.format(iteration))
-    imageio.imsave(path, grid)
+    path = os.path.join(opts.sample_dir, 'sample-{:06d}-Y-X.jpg'.format(iteration))
+    imageio.imsave(path, (merged * 255).astype(np.uint8))
     print('Saved {}'.format(path))
 
 
@@ -285,13 +290,19 @@ def compute_emoji_mean_std(emoji_type, opts):
     return (mean, std)
 
 
-def denormalize(tensor):
+def denormalize(emoji_type, tensor):
     """Denormalize a mini batch of image tensors according to training mean and std.
 
      It works with 3-or-4 dimension tensors.
     """
-    mean=(0.3495, 0.4029, 0.3075)
-    std=(0.2539, 0.2157, 0.2143)
+    if emoji_type == 'Windows':
+        mean = (0.3495, 0.4029, 0.3075)
+        std = (0.2539, 0.2157, 0.2143)
+    else:
+        mean = (0.4643, 0.4766, 0.3764)
+        std = (0.2168, 0.1608, 0.1608)
+
+    tensor = tensor.clone().detach()
 
     if tensor.ndim == 4: # Assume NCHW dimensions
         tensor = tensor.permute(1, 2, 3, 0)
@@ -308,6 +319,14 @@ def denormalize(tensor):
 # In[ ]:
 def get_emoji_loader(emoji_type, opts, mean=(0.3495, 0.4029, 0.3075), std=(0.2539, 0.2157, 0.2143)):
     """Creates training and test data loaders. The mean/std values are computed over training dataset."""
+
+    if emoji_type == 'Windows':
+        mean = (0.3495, 0.4029, 0.3075)
+        std = (0.2539, 0.2157, 0.2143)
+    else:
+        mean = (0.4643, 0.4766, 0.3764)
+        std = (0.2168, 0.1608, 0.1608)
+
     transform = transforms.Compose([
                     transforms.Resize(opts.image_size),
                     transforms.ToTensor(),
@@ -993,13 +1012,10 @@ print_opts(args)
 opts = args
 dataloader_X, test_dataloader_X = get_emoji_loader(emoji_type="Apple", opts=opts)
 sample = next(iter(dataloader_X))[0]
-# display_batch(denormalize(sample))
+# display_batch(denormalize(opts.X, sample))
 
-# %%
-try:
-    G, D = train(args)
-except:
-    import pdb; pdb.post_mortem()
+# %% Training DCGAN
+# G, D = train(args)
 
 # ## CycleGAN
 
