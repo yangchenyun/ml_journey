@@ -216,16 +216,22 @@ def create_image_grid(array, ncols=None):
     if channels == 1:
         result = result.squeeze()
     return result
-  
+
+def save_real_samples(images, batch_index, opts):
+    images = denormalize(images)
+    images = to_data(images)
+    grid = create_image_grid(images)
+    path = os.path.join(opts.sample_dir, 'real-image-{:06d}.png'.format(batch_index))
+    imageio.imsave(path, (grid * 255).astype(np.uint8))
+
+
 def gan_save_samples(G, fixed_noise, iteration, opts):
-    generated_images = G(fixed_noise)
+    generated_images = denormalize(G(fixed_noise).detach())
     generated_images = to_data(generated_images)
 
     grid = create_image_grid(generated_images)
 
-
-    # merged = merge_images(X, fake_Y, opts)
-    path = os.path.join(opts.sample_dir, 'sample-{:06d}.png'.format(iteration))
+    path = os.path.join(opts.sample_dir, 'sample-{:06d}.jpg'.format(iteration))
     imageio.imsave(path, (grid * 255).astype(np.uint8))
 
 def cyclegan_save_samples(iteration, fixed_Y, fixed_X, G_YtoX, G_XtoY, opts):
@@ -251,15 +257,61 @@ def cyclegan_save_samples(iteration, fixed_Y, fixed_X, G_YtoX, G_XtoY, opts):
 # ## Data loader
 
 # In[ ]:
-
-
-def get_emoji_loader(emoji_type, opts):
-    """Creates training and test data loaders.
+def compute_emoji_mean_std(emoji_type, opts):
+    """Compute the mean, std of the training dataset.
+    The value would later be used to normalize the training batch.
     """
     transform = transforms.Compose([
                     transforms.Resize(opts.image_size),
                     transforms.ToTensor(),
-                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                ])
+
+    train_path = os.path.join('data/emojis', emoji_type)
+    train_dataset = datasets.ImageFolder(train_path, transform)
+    loader = DataLoader(dataset=train_dataset, batch_size=opts.batch_size, num_workers=opts.num_workers)
+
+    mean = 0.
+    std = 0.
+
+    for images, _ in loader:
+        batch_samples = images.size(0)  # batch size (the last batch can have smaller size!)
+        images = images.view(batch_samples, images.size(1), -1)
+        mean += images.mean(2).sum(0)
+        std += images.std(2).sum(0)
+
+    mean /= len(loader.dataset)
+    std /= len(loader.dataset)
+
+    return (mean, std)
+
+
+def denormalize(tensor):
+    """Denormalize a mini batch of image tensors according to training mean and std.
+
+     It works with 3-or-4 dimension tensors.
+    """
+    mean=(0.3495, 0.4029, 0.3075)
+    std=(0.2539, 0.2157, 0.2143)
+
+    if tensor.ndim == 4: # Assume NCHW dimensions
+        tensor = tensor.permute(1, 2, 3, 0)
+
+    for t, m, s in zip(tensor, mean, std):
+        t.mul_(s).add_(m)  # inplace multiplication and addition
+
+    if tensor.ndim == 4:
+        tensor = tensor.permute(3, 0, 1, 2)
+
+    return tensor
+
+
+# In[ ]:
+def get_emoji_loader(emoji_type, opts, mean=(0.3495, 0.4029, 0.3075), std=(0.2539, 0.2157, 0.2143)):
+    """Creates training and test data loaders. The mean/std values are computed over training dataset."""
+    transform = transforms.Compose([
+                    transforms.Resize(opts.image_size),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=mean, std=std)
                 ])
 
     train_path = os.path.join('data/emojis', emoji_type)
