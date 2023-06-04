@@ -626,6 +626,9 @@ def gan_training_loop(dataloader, test_dataloader, opts):
           real_images, real_labels = next(train_iter)
           real_images, real_labels = to_var(real_images), to_var(real_labels).long().squeeze()
 
+          if iteration // iter_per_epoch == 0:
+            save_real_samples(real_images, iteration, opts)
+
           d_optimizer.zero_grad()
 
           m = real_images.shape[0]
@@ -928,6 +931,25 @@ data_fpath = get_file(fname='emojis',
                          untar=True)
 
 
+# %% helper function to display the image
+def tensor_to_display(tensor):
+    if isinstance(tensor, np.ndarray):
+        return tensor.transpose(1, 2, 0)
+    elif isinstance(tensor, torch.Tensor):
+        return tensor.permute(1, 2, 0)
+    else:
+        raise TypeError("Unsupported type for tensor_to_display function")
+
+
+def display_batch(batch, row=6, col=6):
+    fig, axs = plt.subplots(row, col, figsize=(10, 10))
+    for i in range(row):
+        for j in range(col):
+            if i*row+j < batch.shape[0]:
+                axs[i, j].imshow(tensor_to_display(batch[i*row+j]))
+                axs[i, j].axis('off')
+    plt.show()
+
 # ## DCGAN
 
 # In[ ]:
@@ -964,10 +986,20 @@ args_dict = {
               'checkpoint_every':1000,
 }
 args.update(args_dict)
-
 print_opts(args)
-G, D = train(args)
 
+# %%
+# Sample the data as 32x32 image and plot the image
+opts = args
+dataloader_X, test_dataloader_X = get_emoji_loader(emoji_type="Apple", opts=opts)
+sample = next(iter(dataloader_X))[0]
+# display_batch(denormalize(sample))
+
+# %%
+try:
+    G, D = train(args)
+except:
+    import pdb; pdb.post_mortem()
 
 # ## CycleGAN
 
