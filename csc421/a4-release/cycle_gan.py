@@ -462,7 +462,10 @@ class DCGenerator(nn.Module):
         # NOTE: upconv, padding is padding of the transposed conv, not the original feature map. (Unlike py torch)
         # Here, we manually calculat the padding needed.
         # i*S - k + 2p + 1; p = [(o - i*S) + (k - 1)]/2
-        self.linear_bn = upconv(100, 128, 4, 1, 3)
+        self.linear_bn = nn.Sequential(
+            nn.Linear(100, 128 * 4 * 4),
+            nn.BatchNorm1d(128*4*4)
+        )
         self.upconv1 = upconv(128, 64, 5, 2, 2)
         self.upconv2 = upconv(64, 32, 5, 2, 2)
         self.upconv3 = upconv(32, 3, 5, 2, 2, batch_norm=False)
@@ -480,7 +483,7 @@ class DCGenerator(nn.Module):
         """
         batch_size = z.size(0)
         
-        out = F.relu(self.linear_bn(z)).view(-1, self.conv_dim*4, 4, 4)    # BS x 128 x 4 x 4
+        out = F.relu(self.linear_bn(z.squeeze())).view(-1, self.conv_dim*4, 4, 4)    # BS x 128 x 4 x 4
         out = F.relu(self.upconv1(out))  # BS x 64 x 8 x 8
         out = F.relu(self.upconv2(out))  # BS x 32 x 16 x 16
         out = torch.tanh(self.upconv3(out))  # BS x 3 x 32 x 32
