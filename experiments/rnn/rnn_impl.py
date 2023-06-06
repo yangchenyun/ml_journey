@@ -74,12 +74,52 @@ class RNNBasic:
         h_i = h_0
         self.h_i_cache[0] = h_i
 
-        for i in range(1, len(in_seq) + 1):  # NOTE: 
+        for i in range(1, len(in_seq) + 1):  # NOTE: Only in_seq is zero-based
             h_i = np.tanh(self.W_hi @ in_seq[i - 1] + self.B_i + self.W_hh @ h_i + self.B_h)
             out_seq[i] = self.W_yh @ h_i + self.B_y
             self.h_i_cache[i] = h_i
+
+        self.in_seq_cache = in_seq
         
         return out_seq[1:]
+
+    def backward(self, dout_seq):
+        """Computes the gradient for each parameters.
+        dout_seq has shape (Len_Seq, output_size)
+        """
+        dW_hh = np.zeros_like(self.W_hh)
+        dW_hi = np.zeros_like(self.W_hi)
+        dB_h = np.zeros_like(self.B_h)
+        dB_i = np.zeros_like(self.B_i)
+        dW_yh = np.zeros_like(self.W_yh)
+        dB_y = np.zeros_like(self.B_y)
+        
+        dh_i_cache = np.empty((len(dout_seq) + 1, self.hidden_size))
+
+        for i in reversed(range(1, len(dout_seq) + 1)):  # NOTE: Only dout_seq is zero-based
+            # linear layer back propagation
+            dW_yh += np.outer(dout_seq[i - 1], self.h_i_cache[i].T)
+            dB_y += dout_seq[i - 1]
+            dh_i_cache[i] = dout_seq[i - 1] @ self.W_yh
+
+            # d(tanh(x))/dx = 1 - (tanh(x))^2.
+            dh_i_linear = dh_i_cache[i] * (1 - np.power(self.h_i_cache[i], 2))
+            dW_hh += np.outer(dh_i_linear, self.h_i_cache[i - 1].T)
+            dW_hi += np.outer(dh_i_linear, self.in_seq_cache[i - 1].T) # NOTE: in_seq is 0-indexed
+            dB_h += dh_i_linear
+            dB_i += dh_i_linear
+            dh_i_cache[i - 1] = dh_i_linear @ self.W_hh
+
+        # Check if the shapes of gradients all match with parameters
+        assert dW_hh.shape == self.W_hh.shape
+        assert dW_hi.shape == self.W_hi.shape
+        assert dB_h.shape == self.B_h.shape
+        assert dB_i.shape == self.B_i.shape
+        assert dW_yh.shape == self.W_yh.shape
+        assert dB_y.shape == self.B_y.shape
+
+        return (dW_hh, dW_hi, dB_h, dB_i, dW_yh, dB_y)
+
 
 # %% Forward comparison
 model = RNNModel(input_size, hidden_size, output_size)
@@ -111,8 +151,46 @@ assert output1.shape == output2.shape
 np.allclose(output1.detach().numpy(), output2, rtol=1e-5, atol=1e-5)
 
 # %% Backward comparison
-# loss = torch.mean((output - input_batch) ** 2)
-# loss.backward()
-# for name, param in model.named_parameters():
-#     if param.requires_grad:
-#         print(name, param.grad.shape)
+output1 = model(input_seq, hidden_0)
+output2 = m2.forward(input_seq.numpy(), hidden_0.numpy())
+model.zero_grad()
+loss = torch.sum(output1 - input_seq)  # NOTE: For simple dout.
+loss.backward()
+
+dout_seq = np.ones_like(output2)
+(dW_hh, dW_hi, dB_h, dB_i, dW_yh, dB_y) = m2.backward(dout_seq)
+
+def gradient_comp(grad1, grad2):
+    gradient_diff = np.abs(grad1 - grad2)
+    max_diff = gradient_diff.max()
+    return max_diff.numpy()
+
+for name, param in model.named_parameters():
+    if param.requires_grad:
+        if name == 'rnn_layer.weight_ih':
+            assert param.shape == dW_hi.shape
+            print("max diff of dW_hi:", gradient_comp(param.grad, dW_hi))
+            # assert np.allclose(param.grad.numpy(), dW_hi, rtol=1e-3, atol=1e-3)
+        elif name == 'rnn_layer.weight_hh':
+            assert param.shape == dW_hh.shape
+            print("max diff of dW_hh:", gradient_comp(param.grad, dW_hh))
+            # assert np.allclose(param.grad.numpy(), dW_hh, rtol=1e-3, atol=1e-3)
+        elif name == 'rnn_layer.bias_ih':
+            assert param.shape == dB_i.shape
+            print("max diff of dB_i:", gradient_comp(param.grad, dB_i))
+            # assert np.allclose(param.grad.numpy(), dB_i, rtol=1e-3, atol=1e-3)
+        elif name == 'rnn_layer.bias_hh':
+            assert param.shape == dB_h.shape
+            print("max diff of dB_h:", gradient_comp(param.grad, dB_h))
+            # assert np.allclose(param.grad.numpy(), dB_h, rtol=1e-2, atol=1e-2)
+        elif name == 'linear_layer.weight':
+            assert param.shape == dW_yh.shape
+            assert np.allclose(param.grad.numpy(), dW_yh, rtol=1e-3, atol=1e-3)
+        elif name == 'linear_layer.bias':
+            assert param.shape == dB_y.shape
+            assert np.allclose(param.grad.numpy(), dB_y, rtol=1e-3, atol=1e-3)
+        else:
+            print("Unexpected model parameter", name, param)
+
+
+# %%
