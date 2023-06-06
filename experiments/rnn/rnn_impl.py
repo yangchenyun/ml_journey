@@ -5,7 +5,11 @@
 # - Pass forward test
 # - Pass backwrd test
 
-# Goal 2: Implement encoder / decoder
+# Goal 2: Implement LSTM
+# - forward
+# - backward
+
+# Goal 3: Implement encoder / decoder
 # - Download dataset
 # - k-hot encoder / decoder
 # - train a few loop
@@ -193,4 +197,99 @@ for name, param in model.named_parameters():
             print("Unexpected model parameter", name, param)
 
 
+# %% Reference implementation with pytorch
+class LSTMModel(torch.nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super(LSTMModel, self).__init__()
+        self.lstm_cell = torch.nn.LSTMCell(input_size, hidden_size, bias=True)
+        self.linear_layer = torch.nn.Linear(hidden_size, output_size)
+
+        # NOTE: used for reference
+        self.model = torch.nn.Sequential(self.lstm_cell, self.linear_layer)
+
+    def forward(self, in_seq, init_0):
+        """
+        in_seq: A sequence in shape (N, In)
+        """
+        h_i, c_i = init_0
+        out = []
+        for i in range(len(in_seq)):
+            h_i, c_i = self.lstm_cell(in_seq[i], (h_i, c_i))
+            out_i = self.linear_layer(h_i)
+            out.append(out_i)
+        return torch.stack(out, 0)
+
+model = LSTMModel(input_size, hidden_size, output_size)
+input_seq = torch.randn(seq_len, input_size)
+h_0 = torch.randn(hidden_size)
+c_0 = torch.randn(hidden_size)
+output = model(input_seq, (h_0, c_0))
+print(output.shape)
+
+# %% Implementation from scratch
+class LSTMBasic:
+    def __init__(self, input_size, hidden_size, output_size):
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        k = 1/hidden_size
+        # NOTE: stack the weights together
+        self.W_hh = init_param((4*hidden_size, hidden_size), k)
+        self.W_hi = init_param((4*hidden_size, input_size), k)
+        self.B_h = init_param((4*hidden_size,), 0)
+        self.B_i = init_param((4*hidden_size,), 0)
+        self.W_yh = init_param((output_size, hidden_size), k)  # TODO: use Xavier normalization here
+        self.B_y = init_param((output_size,), 0)
+
+    def forward(self, in_seq, init_0):
+        # Index starts at 1
+        out_seq = np.empty((len(in_seq) + 1, self.output_size))
+        h_i, c_i = init_0
+
+        sigmoid = lambda x: 1 / (1 + np.exp(-x))
+
+        for i in range(1, len(in_seq) + 1):  # NOTE: Only in_seq is zero-based
+            h_linear = self.W_hi @ in_seq[i - 1] + self.B_i + self.W_hh @ h_i + self.B_h
+
+            i_ = sigmoid(h_linear[:self.hidden_size])
+            f = sigmoid(h_linear[self.hidden_size:2*self.hidden_size])
+            g = np.tanh(h_linear[2*self.hidden_size:3*self.hidden_size])
+            o = sigmoid(h_linear[3*self.hidden_size:])
+
+            c_i = f * c_i + i_ * g
+            h_i = o * np.tanh(c_i)
+
+            out_seq[i] = self.W_yh @ h_i + self.B_y
+        
+        return out_seq[1:]
+
+model = LSTMModel(input_size, hidden_size, output_size)
+m2 = LSTMBasic(input_size, hidden_size, output_size)
+
+for name, param in model.named_parameters():
+    if param.requires_grad:
+        if name == 'lstm_cell.weight_ih':
+            param.data = torch.Tensor(m2.W_hi)
+        elif name == 'lstm_cell.weight_hh':
+            param.data = torch.Tensor(m2.W_hh)
+        elif name == 'lstm_cell.bias_ih':
+            param.data = torch.Tensor(m2.B_i)
+        elif name == 'lstm_cell.bias_hh':
+            param.data = torch.Tensor(m2.B_h)
+        elif name == 'linear_layer.weight':
+            param.data = torch.Tensor(m2.W_yh)
+        elif name == 'linear_layer.bias':
+            param.data = torch.Tensor(m2.B_y)
+        else:
+            print("Unexpected model parameter", name, param)
+
+input_seq = torch.randn(seq_len, input_size)
+h_0 = torch.zeros(hidden_size)
+c_0 = torch.zeros(hidden_size)
+
+output1 = model(input_seq, (h_0, c_0))
+output2 = m2.forward(input_seq.numpy(), (h_0.numpy(), c_0.numpy()))
+
+assert output1.shape == output2.shape
+np.allclose(output1.detach().numpy(), output2, rtol=1e-5, atol=1e-5)
 # %%
