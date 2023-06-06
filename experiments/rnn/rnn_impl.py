@@ -18,7 +18,7 @@ import numpy as np
 input_size = 10
 output_size = 10
 hidden_size = 100
-seq_len = 1
+seq_len = 10
 
 # %% Reference implementation with pytorch
 class RNNModel(torch.nn.Module):
@@ -34,14 +34,20 @@ class RNNModel(torch.nn.Module):
         """
         in_seq: A sequence in shape (N, In)
         """
-        hidden = self.rnn_layer(in_seq, h_0)
-        out = self.linear_layer(hidden)
-        return out
+        t = len(in_seq)
+        h_i = h_0
+        out = []
+        for i in range(t):
+            h_i = self.rnn_layer(in_seq[i], h_i)
+            out_i = self.linear_layer(h_i)
+            out.append(out_i)
+        return torch.stack(out, 0)
 
-# model = RNNModel(input_size, hidden_size, output_size)
-# input_seq = torch.randn(seq_len, input_size)
-# h_0 = torch.randn(1, hidden_size)
-# output = model(input_seq, h_0)
+model = RNNModel(input_size, hidden_size, output_size)
+input_seq = torch.randn(seq_len, input_size)
+h_0 = torch.randn(hidden_size)
+output = model(input_seq, h_0)
+print(output.shape)
 
 # %% Implementation from scratch
 def init_param(shape, k):
@@ -59,16 +65,19 @@ class RNNBasic:
         self.B_i = init_param((hidden_size,), 0)
         self.W_yh = init_param((output_size, hidden_size), k)  # TODO: use Xavier normalization here
         self.B_y = init_param((output_size,), 0)
+        self.h_i_cache = None
 
     def forward(self, in_seq, h_0):
         # Index starts at 1
         out_seq = np.empty((len(in_seq) + 1, self.output_size))
-        h_i = h_0[0, :] # TODO: assuming single batch here
+        self.h_i_cache = np.empty((len(in_seq) + 1, self.hidden_size))
+        h_i = h_0
+        self.h_i_cache[0] = h_i
 
         for i in range(1, len(in_seq) + 1):  # NOTE: 
             h_i = np.tanh(self.W_hi @ in_seq[i - 1] + self.B_i + self.W_hh @ h_i + self.B_h)
-            print(h_i.shape)
             out_seq[i] = self.W_yh @ h_i + self.B_y
+            self.h_i_cache[i] = h_i
         
         return out_seq[1:]
 
@@ -94,7 +103,7 @@ for name, param in model.named_parameters():
             print("Unexpected model parameter", name, param)
 
 input_seq = torch.randn(seq_len, input_size)
-hidden_0 = torch.zeros((1, hidden_size))
+hidden_0 = torch.zeros(hidden_size)
 output1 = model(input_seq, hidden_0)
 output2 = m2.forward(input_seq.numpy(), hidden_0.numpy())
 
