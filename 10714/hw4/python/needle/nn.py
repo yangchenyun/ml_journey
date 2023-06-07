@@ -7,6 +7,7 @@ import needle.init as init
 import numpy as np
 from functools import reduce
 import pickle
+import math
 
 
 class Parameter(Tensor):
@@ -344,9 +345,20 @@ class RNNCell(Module):
 
         Weights and biases are initialized from U(-sqrt(k), sqrt(k)) where k = 1/hidden_size
         """
-        super().__init__()
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.bias = bias
+        self.nonlinearity = nonlinearity
+        k = math.sqrt(1/hidden_size)
+
+        self.W_hh = init.rand(hidden_size, hidden_size, low=-k, high=k, device=device, requires_grad=True)
+        self.W_ih = init.rand(input_size, hidden_size, low=-k, high=k, device=device, requires_grad=True)
+
+        if self.bias:
+            self.bias_hh = init.rand(1, hidden_size, low=-k, high=k, device=device, requires_grad=True)
+            self.bias_ih = init.rand(1, hidden_size, low=-k, high=k, device=device, requires_grad=True)
         ### END YOUR SOLUTION
 
     def forward(self, X, h=None):
@@ -361,7 +373,19 @@ class RNNCell(Module):
             for each element in the batch.
         """
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        if h is None:
+            h = init.zeros(X.shape[0], self.hidden_size, device=X.device)
+
+        h_prime = X @ self.W_ih + h @ self.W_hh
+        if self.bias:
+            h_prime += self.bias_ih.broadcast_to(h_prime.shape) + self.bias_hh.broadcast_to(h_prime.shape)
+
+        if self.nonlinearity == 'tanh':
+            h_prime = h_prime.tanh()
+        elif self.nonlinearity == 'relu':
+            h_prime = h_prime.relu()
+
+        return h_prime
         ### END YOUR SOLUTION
 
 
