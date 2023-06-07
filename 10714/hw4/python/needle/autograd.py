@@ -388,6 +388,9 @@ class Tensor(Value):
     def relu(self):
         return needle.ops.ReLU()(self)
 
+    def tanh(self):
+        return needle.ops.Tanh()(self)
+
     def exp(self):
         return needle.ops.Exp()(self)
 

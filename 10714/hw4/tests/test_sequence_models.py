@@ -98,7 +98,7 @@ def test_lstm_cell(batch_size, input_size, hidden_size, bias, init_hidden, devic
 
 
 SEQ_LENGTHS = [1, 13]
-NUM_LAYERS = [1, 2]
+NUM_LAYERS = [1, 2, 4]
 @pytest.mark.parametrize("seq_length", SEQ_LENGTHS)
 @pytest.mark.parametrize("num_layers", NUM_LAYERS)
 @pytest.mark.parametrize("batch_size", BATCH_SIZES)
@@ -135,7 +135,14 @@ def test_rnn(seq_length, num_layers, batch_size, input_size, hidden_size, bias, 
 
     output.sum().backward()
     output_.sum().backward()
-    np.testing.assert_allclose(model.rnn_cells[0].W_ih.grad.detach().numpy(), model_.weight_ih_l0.grad.numpy().transpose(), atol=1e-5, rtol=1e-5)
+
+    for k in range(num_layers):
+        np.testing.assert_allclose(model.rnn_cells[k].W_hh.grad.detach().numpy(), getattr(model_, f'weight_hh_l{k}').grad.numpy().transpose(), atol=1e-5, rtol=1e-5)
+        np.testing.assert_allclose(model.rnn_cells[k].W_ih.grad.detach().numpy(), getattr(model_, f'weight_ih_l{k}').grad.numpy().transpose(), atol=1e-5, rtol=1e-5)
+
+        if bias:
+            np.testing.assert_allclose(model.rnn_cells[k].bias_hh.grad.detach().numpy(), getattr(model_, f'bias_hh_l{k}').grad.numpy().transpose(), atol=1e-5, rtol=1e-5)
+            np.testing.assert_allclose(model.rnn_cells[k].bias_ih.grad.detach().numpy(), getattr(model_, f'bias_ih_l{k}').grad.numpy().transpose(), atol=1e-5, rtol=1e-5)
 
 
 @pytest.mark.parametrize("seq_length", SEQ_LENGTHS)
