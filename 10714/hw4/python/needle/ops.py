@@ -518,11 +518,23 @@ class Tanh(TensorOp):
 
     def gradient(self, out_grad, node):
         input = node.inputs[0]
-        tanh = self.compute(input)
-        return out_grad * (1 - tanh ** 2)
+        return out_grad * (1 - tanh(input) ** 2)
 
 def tanh(a):
     return Tanh()(a)
+
+
+class Sigmoid(TensorOp):
+    def compute(self, a):
+        return (1 + array_api.exp(-a))**-1
+
+    def gradient(self, out_grad, node):
+        input = node.inputs[0]
+        s = sigmoid(input)
+        return out_grad * s * (1 - s)
+
+def sigmoid(a):
+    return Sigmoid()(a)
 
 
 class Stack(TensorOp):

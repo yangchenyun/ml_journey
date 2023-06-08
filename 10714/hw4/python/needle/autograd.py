@@ -391,6 +391,9 @@ class Tensor(Value):
     def tanh(self):
         return needle.ops.Tanh()(self)
 
+    def sigmoid(self):
+        return needle.ops.Sigmoid()(self)
+
     def exp(self):
         return needle.ops.Exp()(self)
 

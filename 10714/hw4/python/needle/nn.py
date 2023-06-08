@@ -353,12 +353,12 @@ class RNNCell(Module):
         self.nonlinearity = nonlinearity
         k = math.sqrt(1/hidden_size)
 
-        self.W_hh = init.rand(hidden_size, hidden_size, low=-k, high=k, device=device, requires_grad=True)
-        self.W_ih = init.rand(input_size, hidden_size, low=-k, high=k, device=device, requires_grad=True)
+        self.W_hh = Parameter(init.rand(hidden_size, hidden_size, low=-k, high=k, device=device, requires_grad=True))
+        self.W_ih = Parameter(init.rand(input_size, hidden_size, low=-k, high=k, device=device, requires_grad=True))
 
         if self.bias:
-            self.bias_hh = init.rand(1, hidden_size, low=-k, high=k, device=device, requires_grad=True)
-            self.bias_ih = init.rand(1, hidden_size, low=-k, high=k, device=device, requires_grad=True)
+            self.bias_hh = Parameter(init.rand(1, hidden_size, low=-k, high=k, device=device, requires_grad=True))
+            self.bias_ih = Parameter(init.rand(1, hidden_size, low=-k, high=k, device=device, requires_grad=True))
         ### END YOUR SOLUTION
 
     def forward(self, X, h=None):
@@ -384,6 +384,7 @@ class RNNCell(Module):
             h_prime = h_prime.tanh()
         elif self.nonlinearity == 'relu':
             h_prime = h_prime.relu()
+
 
         return h_prime
         ### END YOUR SOLUTION
@@ -477,9 +478,20 @@ class LSTMCell(Module):
         """
         super().__init__()
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.bias = bias
+        self.device = device
+        self.dtype = dtype
+        k = math.sqrt(1/hidden_size)
 
+        self.W_hh = Parameter(init.rand(hidden_size, 4*hidden_size, low=-k, high=k, device=device), requires_grad=True)
+        self.W_ih = Parameter(init.rand(input_size, 4*hidden_size, low=-k, high=k, device=device), requires_grad=True)
+
+        if self.bias:
+            self.bias_hh = Parameter(init.rand(1, 4*hidden_size, low=-k, high=k, device=device), requires_grad=True)
+            self.bias_ih = Parameter(init.rand(1, 4*hidden_size, low=-k, high=k, device=device), requires_grad=True)
+        ### END YOUR SOLUTION
 
     def forward(self, X, h=None):
         """
@@ -498,7 +510,34 @@ class LSTMCell(Module):
             element in the batch.
         """
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        if h is None:
+            h0 = init.zeros(X.shape[0], self.hidden_size, device=self.device)
+            c0 = init.zeros(X.shape[0], self.hidden_size, device=self.device)
+        else:
+            h0, c0 = h
+
+        # (B, hidden_size*4)
+        h_linear = X @ self.W_ih + h0 @ self.W_hh
+        if self.bias:
+            h_linear += self.bias_ih.broadcast_to(h_linear.shape) + self.bias_hh.broadcast_to(h_linear.shape)
+
+        def split_list(lst, k):
+            n = len(lst)
+            return [lst[i * n // k: (i + 1) * n // k] for i in range(k)]
+
+        def sigmoid(x):
+            return 1 / (1 + np.exp(-x))
+
+        i, f, g, o = split_list([p.reshape((p.shape[0],)) for p in ops.split(h_linear, axis=1)], 4)
+        i = ops.stack(i, axis=1).sigmoid()
+        f = ops.stack(f, axis=1).sigmoid()
+        g = ops.stack(g, axis=1).tanh()
+        o = ops.stack(o, axis=1).sigmoid()
+
+        c_prime = c0 * f + i * g
+        h_prime = o * c_prime.tanh()
+
+        return h_prime, c_prime
         ### END YOUR SOLUTION
 
 
@@ -526,8 +565,15 @@ class LSTM(Module):
             of shape (4*hidden_size,).
         """
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.device = device
+        self.dtype = dtype
+        self.lstm_cells = [LSTMCell(input_size, hidden_size, bias, device, dtype)] + [
+                LSTMCell(hidden_size, hidden_size, bias, device, dtype) for _ in range(num_layers - 1)]
         ### END YOUR SOLUTION
+
 
     def forward(self, X, h=None):
         """
@@ -547,9 +593,31 @@ class LSTM(Module):
             h_n of shape (num_layers, bs, hidden_size) containing the final hidden cell state for each element in the batch.
         """
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        T,B,_ = X.shape
+        H = init.zeros(T, self.num_layers, B, self.hidden_size, device=X.device)
+        C = init.zeros(T, self.num_layers, B, self.hidden_size, device=X.device)
 
+        if h is None:
+            h0 = [init.zeros(B, self.hidden_size, device=X.device, dtype=X.dtype) for _ in range(self.num_layers)]
+            c0 = [init.zeros(B, self.hidden_size, device=X.device, dtype=X.dtype) for _ in range(self.num_layers)]
+        else:
+            h0 = [t.reshape(t.shape[1:]) for t in ops.split(h[0], 0)]
+            c0 = [t.reshape(t.shape[1:]) for t in ops.split(h[1], 0)]
+
+        input_outputs = [t.reshape(t.shape[1:]) for t in ops.split(X, 0)]
+        h_n = []
+        c_n = []
+        for l in range(self.num_layers):
+            h = h0[l]
+            c = c0[l]
+            for t in range(0, T):
+                h, c = self.lstm_cells[l](input_outputs[t], (h, c))
+                input_outputs[t] = h  # NOTE: Discard input at time t
+            h_n.append(h)
+            c_n.append(c)
+
+        return ops.stack(input_outputs, 0), (ops.stack(h_n, 0), ops.stack(c_n, 0))
+        ### END YOUR SOLUTION
 
 class Embedding(Module):
     def __init__(self, num_embeddings, embedding_dim, device=None, dtype="float32"):
