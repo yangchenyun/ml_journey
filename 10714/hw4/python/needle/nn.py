@@ -634,7 +634,10 @@ class Embedding(Module):
             initialized from N(0, 1).
         """
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        self.num_embeddings = num_embeddings
+        self.device = device
+        self.dtype = dtype
+        self.weight = Parameter(init.randn(num_embeddings, embedding_dim, device=device, dtype=dtype))
         ### END YOUR SOLUTION
 
     def forward(self, x: Tensor) -> Tensor:
@@ -648,5 +651,12 @@ class Embedding(Module):
         output of shape (seq_len, bs, embedding_dim)
         """
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        T, B = x.shape
+        # NOTE: x is detached from the computational graph
+        x_data = x.detach().numpy().astype(np.int32).reshape(-1)
+        one_hot_encoded = np.eye(self.num_embeddings)[x_data]
+        one_hot_encoded = Tensor(one_hot_encoded, device=self.device, dtype=self.dtype)
+        output = one_hot_encoded @ self.weight
+        output = output.reshape((T, B, -1))
+        return output
         ### END YOUR SOLUTION

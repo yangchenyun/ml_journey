@@ -1,5 +1,6 @@
 import sys
 sys.path.append('../python')
+
 import needle as ndl
 import needle.nn as nn
 from needle import backend_ndarray as nd
@@ -117,6 +118,7 @@ def evaluate_cifar10(model, dataloader, loss_fn=nn.SoftmaxLoss):
 
 
 ### PTB training ###
+
 def epoch_general_ptb(data, model, seq_len=40, loss_fn=nn.SoftmaxLoss(), opt=None,
         clip=None, device=None, dtype="float32"):
     """
@@ -139,9 +141,44 @@ def epoch_general_ptb(data, model, seq_len=40, loss_fn=nn.SoftmaxLoss(), opt=Non
     """
     np.random.seed(4)
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+    running_loss = 1e-8
+    running_error_count = 0
+    running_N = 0
+    nbatch, batch_size = data.shape
+    if opt is not None:
+        model.train()
+    else:
+        model.eval()
 
+    hidden = None
+    # NOTE: choose to train on shorter sequence as well, see get_batch
+    for i in range(0, nbatch - 1, seq_len):
+        x, y = ndl.data.get_batch(data, i, seq_len, device, dtype)
+        output, hidden = model(x, hidden)
+
+        # NOTE: repacked training
+        if isinstance(hidden, tuple):
+            h, c = hidden
+            hidden = (h.detach(), c.detach())
+        else:
+            hidden = hidden.detach()
+
+        # NOTE: y could be one seq shorter than x
+        loss = loss_fn(output, y)
+
+        # book keeping, no_grad
+        running_error_count += error_count(output, y)
+        running_loss += loss.numpy() * batch_size
+        running_N += batch_size 
+
+        # backward pass, takes place on every batch. "tiny little steps"
+        if model.training:
+            opt.reset_grad()
+            loss.backward()
+            opt.step()
+
+    return 1.0 - running_error_count / running_N, running_loss / running_N
+    ### END YOUR SOLUTION
 
 def train_ptb(model, data, seq_len=40, n_epochs=1, optimizer=ndl.optim.SGD,
           lr=4.0, weight_decay=0.0, loss_fn=nn.SoftmaxLoss, clip=None,
@@ -166,7 +203,12 @@ def train_ptb(model, data, seq_len=40, n_epochs=1, optimizer=ndl.optim.SGD,
     """
     np.random.seed(4)
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    opt = optimizer(model.parameters(), lr, weight_decay=weight_decay)
+    for i in range(n_epochs):
+        avg_acc, avg_loss = epoch_general_ptb(data, model, seq_len, loss_fn=loss_fn(), opt=opt, clip=clip, device=device, dtype=dtype)
+        print(f"Epoch {i} - Accuracy: {avg_acc} - Loss: {avg_loss}")
+
+    return avg_acc, avg_loss
     ### END YOUR SOLUTION
 
 
@@ -187,7 +229,7 @@ def evaluate_ptb(model, data, seq_len=40, loss_fn=nn.SoftmaxLoss,
     """
     np.random.seed(4)
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    return epoch_general_ptb(data, model, seq_len, loss_fn=loss_fn(), device=device, dtype=dtype)
     ### END YOUR SOLUTION
 
 
@@ -205,7 +247,7 @@ if __name__ == "__main__":
     #train_cifar10(model, dataloader, n_epochs=10, optimizer=ndl.optim.Adam,
     #      lr=0.001, weight_decay=0.001)
 
-    corpus = ndl.data.Corpus("./data/ptb")
+    corpus = ndl.data.Corpus("../data/ptb")
     seq_len = 40
     batch_size = 16
     hidden_size = 100

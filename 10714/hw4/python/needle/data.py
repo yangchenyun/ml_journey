@@ -510,6 +510,11 @@ def get_batch(batches, i, bptt, device=None, dtype=None):
     target - Tensor of shape (bptt*bs,) with cached data as NDArray
     """
     ### BEGIN YOUR SOLUTION
+    nbatch = batches.shape[0]
+    assert i + 1 < nbatch
+    # NOTE: truncate the input to match with output size
+    if i + bptt > nbatch - 1:
+        bptt = nbatch - 1 - i
     data = Tensor(batches[i:i+bptt], device=device, dtype=dtype)
     target = Tensor(batches[i+1:i+1+bptt].reshape(-1, 1).squeeze(), device=device, dtype=dtype)
     return data, target

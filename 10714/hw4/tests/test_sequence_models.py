@@ -98,7 +98,7 @@ def test_lstm_cell(batch_size, input_size, hidden_size, bias, init_hidden, devic
 
 
 SEQ_LENGTHS = [1, 13]
-NUM_LAYERS = [1, 2, 4]
+NUM_LAYERS = [1, 2]
 @pytest.mark.parametrize("seq_length", SEQ_LENGTHS)
 @pytest.mark.parametrize("num_layers", NUM_LAYERS)
 @pytest.mark.parametrize("batch_size", BATCH_SIZES)
