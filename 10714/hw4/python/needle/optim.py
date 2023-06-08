@@ -28,7 +28,7 @@ class SGD(Optimizer):
         u = self.u
         for p in self.params:
             if p.grad:
-                grad = p.grad.numpy().astype(p.data.dtype)
+                grad = p.grad.data
                 # Weight decay, penalize according to weight values
                 if self.weight_decay > 0:
                     grad += self.weight_decay * p.numpy()
