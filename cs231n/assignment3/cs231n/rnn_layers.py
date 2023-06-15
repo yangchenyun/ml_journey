@@ -73,7 +73,9 @@ def rnn_step_forward(x, prev_h, Wx, Wh, b):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    linear_h = prev_h @ Wh + x @ Wx + b.reshape(1, -1)
+    next_h = np.tanh(linear_h)
+    cache = prev_h, next_h, Wx, Wh, x
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -104,8 +106,14 @@ def rnn_step_backward(dnext_h, cache):
     # of the output value from tanh.                                             #
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    prev_h, next_h, Wx, Wh, x = cache
 
-    pass
+    dtanh_h = dnext_h * (1 - next_h ** 2)
+    db = dtanh_h.sum(axis=0)
+    dWx = x.T @ dtanh_h
+    dWh = prev_h.T @ dtanh_h
+    dx = dtanh_h @ Wx.T
+    dprev_h = dtanh_h @ Wh.T
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -139,8 +147,17 @@ def rnn_forward(x, h0, Wx, Wh, b):
     # above. You can use a for loop to help compute the forward pass.            #
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    x = x.transpose(1, 0, 2)
+    T, N, D = x.shape
 
-    pass
+    cache = {}
+    h_t = h0
+    h = []
+    for t in range(T):
+        h_t, cache[t] = rnn_step_forward(x[t], h_t, Wx, Wh, b)
+        h.append(h_t)
+
+    h = np.stack(h, 0).transpose(1, 0, 2)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -174,8 +191,26 @@ def rnn_backward(dh, cache):
     # defined above. You can use a for loop to help compute the backward pass.   #
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    dh = dh.transpose(1, 0, 2)
+    T, N, H = dh.shape
 
-    pass
+    dx = []
+    dprev_h = np.zeros((N, H))
+    for t in reversed(range(T)):
+        # NOTE: Adds up gradients from loss and from previous timestep
+        dx_t, dprev_h, dWx_t, dWh_t, db_t = rnn_step_backward(dprev_h + dh[t], cache[t])
+        if t == T - 1:
+            dWx = dWx_t
+            dWh = dWh_t
+            db = db_t
+        else:
+            dWx += dWx_t
+            dWh += dWh_t
+            db += db_t
+        dx.append(dx_t)
+
+    dh0 = dprev_h
+    dx = np.flip(np.stack(dx, 0), 0).transpose(1, 0, 2)  # NOTE: Flip back to original order
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -208,7 +243,8 @@ def word_embedding_forward(x, W):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    out = W[x]
+    cache = x, W
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -241,8 +277,17 @@ def word_embedding_backward(dout, cache):
     # HINT: Look up the function np.add.at                                       #
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    x, W = cache
 
-    pass
+    # NOTE: In forward pass, x is the used as index to get the word weight vector
+    dW = np.zeros_like(W)
+    N, T, D = dout.shape
+
+    # for n in range(N):
+    #     for t in range(T):
+    #         np.add.at(dW, x[n, t], dout[n, t, :])
+
+    np.add.at(dW, x.ravel(), dout.reshape(-1, D)) # Flatten both vectors for compact operation
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################

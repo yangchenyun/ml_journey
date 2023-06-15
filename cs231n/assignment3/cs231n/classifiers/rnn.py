@@ -147,8 +147,19 @@ class CaptioningRNN:
         # in your implementation, if needed.                                       #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        h0, affine_cache = affine_forward(features, W_proj, b_proj)
+        words_in, embedding_cache = word_embedding_forward(captions_in, W_embed) # (N, T, W)
+        if self.cell_type == 'rnn':
+          out_logits, rnn_cache = rnn_forward(words_in, h0, Wx, Wh, b) # (N, T, H)
+        out_vocab, temporal_cache = temporal_affine_forward(out_logits, W_vocab, b_vocab) # (N, T, V)
 
-        pass
+        # captions_out.shape == (N, T)
+        loss, dout_vocab = temporal_softmax_loss(out_vocab, captions_out, mask)
+        grads = {}
+        dout_logits, grads["W_vocab"], grads["b_vocab"] = temporal_affine_backward(dout_vocab, temporal_cache)
+        dwords_in, dfeatures, grads["Wx"], grads["Wh"], grads["b"] = rnn_backward(dout_logits, rnn_cache)
+        grads["W_embed"] = word_embedding_backward(dwords_in, embedding_cache)
+        _, grads["W_proj"], grads["b_proj"] = affine_backward(dfeatures, affine_cache)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -216,7 +227,21 @@ class CaptioningRNN:
         ###########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        h_t, _ = affine_forward(features, W_proj, b_proj)
+        x_t = self._start
+        # c_t = np.zeros_like(h_t)
+        for t in range(max_length):
+          x_t_embed, _ = word_embedding_forward(x_t, W_embed)
+          if self.cell_type == 'rnn':
+            h_t, _ = rnn_step_forward(x_t_embed, h_t, Wx, Wh, b)
+          # elif self.cell_type == 'lstm':
+          #   h_t, c_t, _ = lstm_step_forward(x_t_embed, h_t, c_t, Wx, Wh, b)
+          else:
+            raise ValueError('Invalid cell_type "%s"' % self.cell_type)
+
+          out_t, _ = affine_forward(h_t, W_vocab, b_vocab)
+          x_t = np.argmax(out_t, axis=1)
+          captions[:, t] = x_t
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
