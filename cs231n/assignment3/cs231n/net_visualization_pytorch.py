@@ -18,7 +18,7 @@ def compute_saliency_maps(X, y, model):
     - saliency: A Tensor of shape (N, H, W) giving the saliency maps for the input
     images.
     """
-    # Make sure the model is in "test" mode
+    # Make sure the model is in "test" mode, needed for Dropout / BatchNorm
     model.eval()
 
     # Make input tensor require gradient
@@ -33,9 +33,12 @@ def compute_saliency_maps(X, y, model):
     # the gradients with a backward pass.                                        #
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    logits = model(X).softmax(dim=1)
 
-    pass
+    correct_score = logits.gather(1, y.view(-1, 1)).squeeze()  # find the score of the correct class
+    correct_score.sum().backward()
 
+    saliency, _ = torch.max(torch.abs(X.grad), 1, keepdim=False)
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
     #                             END OF YOUR CODE                               #
@@ -60,7 +63,7 @@ def make_fooling_image(X, target_y, model):
     X_fooling = X.clone()
     X_fooling = X_fooling.requires_grad_()
 
-    learning_rate = 1
+    learning_rate = 0.1
     ##############################################################################
     # TODO: Generate a fooling image X_fooling that the model will classify as   #
     # the class target_y. You should perform gradient ascent on the score of the #
@@ -76,7 +79,22 @@ def make_fooling_image(X, target_y, model):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    epoch = 0
+    while True:
+        epoch += 1
+        logits = model(X_fooling).softmax(dim=1)
+        if (logits.argmax(1) == target_y):
+            break
+        score = logits[0][target_y]
+        score.backward()
+        dX = X_fooling.grad / torch.linalg.matrix_norm(X_fooling.grad, keepdim=True, ord='fro')
+        dX *= learning_rate
+
+        # NOTE: No need to track gradient
+        with torch.no_grad():
+            X_fooling += dX
+        X_fooling.grad = None
+        print(f"Epoch: {epoch}, score: {score.item()}")
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -94,7 +112,17 @@ def class_visualization_update_step(img, model, target_y, l2_reg, learning_rate)
     ########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    model.eval()
+    img.requires_grad_()
+    img.grad = None
+
+    score = model(img)[0][target_y] - l2_reg * torch.linalg.matrix_norm(img, keepdim=False, ord='fro').sum()
+    score.backward()
+
+    #  / torch.linalg.matrix_norm(img.grad, keepdim=True, ord='fro')
+
+    with torch.no_grad():
+        img += img.grad * learning_rate
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ########################################################################
