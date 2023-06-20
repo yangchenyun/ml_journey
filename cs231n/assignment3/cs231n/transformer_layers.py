@@ -37,8 +37,11 @@ class PositionalEncoding(nn.Module):
         # less than 5 lines of code.                                               #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-        pass
+        
+        div_term = torch.exp(torch.arange(0, embed_dim, 2) * -(math.log(1e4) / embed_dim))
+        pos = torch.arange(0, max_len).reshape(max_len, 1)
+        pe[:, :, 0::2] = torch.sin(pos * div_term)
+        pe[:, :, 1::2] = torch.cos(pos * div_term)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -69,8 +72,9 @@ class PositionalEncoding(nn.Module):
         # afterward. This should only take a few lines of code.                    #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-        pass
+        pe = self.pe
+        output = x + pe[:, :S, :]
+        output = self.dropout(output)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -165,7 +169,37 @@ class MultiHeadAttention(nn.Module):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        # Split E, E -> E, H, E/H
+        def split_head(t):
+          return torch.stack(t.split(self.head_dim, 2), 2)
+
+        query = split_head(self.query(query))
+        key = split_head(self.key(key))
+        value = split_head(self.value(value))
+
+        # print("q,k,v.shape: ", query.shape, key.shape, value.shape)
+
+        # N, S, H, E/H -> N, H, S, E/H
+        query = query.permute(0, 2, 1, 3)
+        # N, T, H, E/H -> N, H, E/H, T
+        key = key.permute(0, 2, 3, 1)
+        # N, T, H, E/H -> N, H, T, E/H
+        value = value.permute(0, 2, 1, 3)
+
+        kq = torch.matmul(query, key) # N, H, S, T
+
+        # NOTE: In kq, the last row is influence of S_i on T_i.
+        if attn_mask is not None:
+          kq = kq.masked_fill((attn_mask == 0).reshape(1, 1, S, T), float('-inf'))
+
+        # NOTE: softmax on the last dimension of T
+        softmax = torch.nn.functional.softmax(kq / math.sqrt(self.head_dim), dim=-1)
+        dropped = self.attn_drop(softmax)
+
+        output = torch.matmul(dropped, value) # N, H, S, E/H
+        output = output.permute(0, 2, 1, 3).reshape(N, S, E)
+        output = self.proj(output)
+
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
