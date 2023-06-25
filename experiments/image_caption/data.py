@@ -18,7 +18,7 @@ class CaptionDataset(torch.utils.data.Dataset):
         
         self.image_paths = []
         self.captions = []
-        
+
         with open(self.caption_file, 'r') as f:
             next(f) # ignore the first line
             for line in f:
@@ -61,3 +61,55 @@ def plot_image_caption_grid(dataset, num_images=4):
 # Test the function
 dataset = CaptionDataset(caption_file="~/.dataset/flickr8k_captions.txt", image_folder="~/.dataset/flickr8k")
 plot_image_caption_grid(dataset, num_images=5)
+
+# %%
+# Vocabulary Encoding
+
+class Vocabulary:
+    def __init__(self):
+        self.word2idx = {}
+        self.idx2word = {}
+        self.idx = 0
+        
+    def add_word(self, word):
+        if word not in self.word2idx:
+            self.word2idx[word] = self.idx
+            self.idx2word[self.idx] = word
+            self.idx += 1
+            
+    def __len__(self):
+        return len(self.word2idx)
+
+    def __str__(self):
+        return f"Vocabulary(size={len(self)})"
+
+    def __repr__(self):
+        return str(self)
+
+    def __getitem__(self, idx):
+        if isinstance(idx, int):
+            return self.idx2word[idx]
+        elif isinstance(idx, str):
+            return self.word2idx[idx]
+        else:
+            raise ValueError(f"Invalid argument type: {type(idx)}")
+
+    def to_indices(self, tokens):
+        return [self.word2idx[token] for token in tokens]
+
+    def to_tokens(self, indices):
+        return [self.idx2word[index] for index in indices]
+
+    @staticmethod
+    def from_corpus(corpus, tokenize: callable):
+        vocab = Vocabulary()
+        for sentence in corpus:
+            for token in tokenize(sentence):
+                vocab.add_word(token)
+        return vocab
+
+with_start_end = lambda tokens: ['<start>'] + tokens + ['<end>']
+word_tokenizer = lambda s: with_start_end(s.split())
+char_tokenizer = lambda s: with_start_end(list(s))
+
+vocab = Vocabulary.from_corpus(dataset.captions, char_tokenizer)
