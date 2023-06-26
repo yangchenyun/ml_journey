@@ -11,20 +11,19 @@ Microsoft COCO 2017 with the original split of train, validation, test.
 The dataset could be assessed via `pytorch.vision`.
 
 Tasks
-- [ ] Read and understand the structure of data and its labels
-- [ ] Download three split of dataset
-- [ ] Prepare data batch, each data entry should contain a pair of image and captions
+- [x] Read and understand the structure of data and its labels
+- [x] Download three split of dataset
+- [x] Prepare data batch, each data entry should contain a pair of image and captions
 
 Data preparation
 - Downsampling with PCA projection.
 
 Data augmentation for images
-- [ ] Normalize the data with subtracting mean and variance.
-- [ ] Augmentation pipeline setup with `pytorch.vision.transform`.
+- [x] Normalize the data with subtracting mean and variance.
 
 Data preparation
-- [ ] Use one-hot encoding for the character sequence data, specially treatment of `<END>` and `<START>` token.
-- [ ] Pad token with `<NULL>` for the same length.
+- [x] Use one-hot encoding for the character sequence data, specially treatment of `<END>` and `<START>` token.
+- [x] Pad token with `<NULL>` for the same length.
 
 How to not compute loss for `<NULL>` tokens?
 
