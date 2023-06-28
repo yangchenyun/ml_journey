@@ -183,15 +183,16 @@ class Vocabulary:
             data = json.load(f)
 
         self.word2idx = defaultdict(lambda: data['word2idx']['<unk>'], data['word2idx'])
-        self.idx2word = defaultdict(lambda: '<unk>', data['idx2word'])
+        self.idx2word = defaultdict(lambda: '<unk>', {int(k): v for k, v in data['idx2word'].items()})
         self.idx = data['idx']
         self.word_freq = Counter(data['word_freq'])
 
 
+
 # %%
 vocab = Vocabulary.from_corpus(dataset.token_captions, min_word_freq=3)
-# vocab = Vocabulary()
-# vocab.load("flickr8k_vocab.json")
+vocab = Vocabulary()
+vocab.load("flickr8k_vocab.json")
  
 plt.figure(figsize=(10, 5))
 plt.bar(vocab.word_freq.keys(), vocab.word_freq.values())
@@ -261,9 +262,9 @@ class TokenEncoder:
         tokens = tokens_caption[:self.max_len]
         # Encode captions
         enc_c = ([self.vocab['<start>']] +
-                 [self.vocab.get(word, self.vocab['<unk>']) for word in tokens_caption] +
+                 [self.vocab.get(word, self.vocab['<unk>']) for word in tokens] +
                  [self.vocab['<end>']] +
-                 [self.vocab['<null>']] * (self.max_len - len(tokens_caption)))
+                 [self.vocab['<null>']] * (self.max_len - len(tokens)))
         return torch.tensor(enc_c)
 
 vocab = Vocabulary()
