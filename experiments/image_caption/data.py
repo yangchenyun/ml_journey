@@ -99,8 +99,8 @@ def plot_image_caption_grid(dataset, num_images=4):
     plt.show()
 
 # Test the function
-dataset = CaptionDataset(json_file="~/.dataset/dataset_flickr8k.json", image_folder="~/.dataset/flickr8k", split='train')
-plot_image_caption_grid(dataset, num_images=5)
+# dataset = CaptionDataset(json_file="~/.dataset/dataset_flickr8k.json", image_folder="~/.dataset/flickr8k", split='train')
+# plot_image_caption_grid(dataset, num_images=5)
 
 # %%
 # Vocabulary Encoding
@@ -190,18 +190,18 @@ class Vocabulary:
 
 
 # %%
-vocab = Vocabulary.from_corpus(dataset.token_captions, min_word_freq=3)
+# vocab = Vocabulary.from_corpus(dataset.token_captions, min_word_freq=3)
 vocab = Vocabulary()
 vocab.load("flickr8k_vocab.json")
  
-plt.figure(figsize=(10, 5))
-plt.bar(vocab.word_freq.keys(), vocab.word_freq.values())
-plt.title("Vocabulary Word Frequency")
-plt.xlabel("Words")
-plt.ylabel("Frequency (log)")
-plt.yscale('log')
-plt.xticks()
-plt.show()
+# plt.figure(figsize=(10, 5))
+# plt.bar(vocab.word_freq.keys(), vocab.word_freq.values())
+# plt.title("Vocabulary Word Frequency")
+# plt.xlabel("Words")
+# plt.ylabel("Frequency (log)")
+# plt.yscale('log')
+# plt.xticks()
+# plt.show()
 
 # %%
 # Build data loader to support train / test / validate split and batch size
@@ -230,21 +230,14 @@ def build_data_loader(json_file, image_folder,
         split='test')
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size,
-                                               shuffle=True,
-                                               drop_last=True)
+                                               shuffle=True)
+
     valid_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=batch_size, shuffle=False)
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=batch_size, shuffle=False)
 
     return train_loader, valid_loader, test_loader
-
-transform = torchvision.transforms.Compose([
-    torchvision.transforms.Resize((256, 256)),
-    torchvision.transforms.ToTensor(),
-    # NOTE: Depends on the pre-trained model 
-    # torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
 
 class TokenEncoder:
     def __init__(self, vocab, max_len=30):
@@ -272,9 +265,17 @@ vocab.load("flickr8k_vocab.json")
 
 # np.percentile(([len(s) for s in dataset.token_captions]), 98)
 
-train_loader, valid_loader, test_loader = build_data_loader(
-    json_file="~/.dataset/dataset_flickr8k.json", 
-    image_folder="~/.dataset/flickr8k",
-    transform=transform, 
-    token_processer=TokenEncoder(vocab, 20),
-    batch_size=8)
+if False:
+    transform = torchvision.transforms.Compose([
+        torchvision.transforms.Resize((256, 256)),
+        torchvision.transforms.ToTensor(),
+        # NOTE: Depends on the pre-trained model 
+        # torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
+    train_loader, valid_loader, test_loader = build_data_loader(
+        json_file="~/.dataset/dataset_flickr8k.json", 
+        image_folder="~/.dataset/flickr8k",
+        transform=transform, 
+        token_processer=TokenEncoder(vocab, 20),
+        batch_size=8)
