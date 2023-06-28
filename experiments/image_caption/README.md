@@ -44,10 +44,11 @@ Questions
 - Does beam search could be applied during training as well?
 
 Tasks
-- [ ] Setup and validate the pre-trained model 
-- [ ] Connect image model with GRU, confirm the model would emit sequence of logits
-- [ ] Validate model output, use greedy decoder to sample the initial model.
-- [ ] Validate the connector between data loader and model. Sampling the models with a few batches of data.
+- [x] Setup and validate the pre-trained model 
+- [x] Connect image model with GRU, confirm the model would emit sequence of logits
+- [x] Create the attention component to compute the encoded images
+- [x] Validate model output, use greedy decoder to sample the initial model.
+- [x] Validate the connector between data loader and model. Sampling the models with a few batches of data.
 
 ## Training configuration
 Batch
