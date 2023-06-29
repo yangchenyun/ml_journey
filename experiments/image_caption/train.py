@@ -1,67 +1,123 @@
 # %%
-import itertools
+from typing import Dict
+
 import torch
 from data import build_data_loader, TokenEncoder, vocab
-from model import Decoder, inception_transform
+from model import Decoder, Encoder, inception_transform
+from dataclasses import dataclass
+from trainer import TrainerConfig, TrainerModel, Trainer, TrainerArgs
 
-lr=4e-4
-momentum=0.9
-weight_decay=1e-4
-vocab_size = len(vocab)
-hidden_size = 512
-feature_size = 1536
-embedding_size = 512
-num_layers = 512
-dropout = 0.5
-json_file = "~/.dataset/dataset_flickr8k.json"
-image_folder = "~/.dataset/flickr8k"
-max_cap_len = 20
+#%%
+@dataclass
+class CaptionModelConfig(TrainerConfig):
+    optimizer: str = "Adam"
+    lr_scheduler: str = "StepLR"
 
-# %%
-def epoch(model, train_data_loader, optimizer):
-    loss_fn = torch.nn.CrossEntropyLoss()
-    total_loss = 0
-    num_batches = 0
+    epochs: int = 100
+    batch_size: int = 8
+    max_train: int = 64
+    max_val: int = 16
 
-    train_data_loader = itertools.islice(train_data_loader, 10)
+    print_step: int = 10
+    save_step: int = 2000
+    plot_step: int = 5
+    dashboard_logger: str = "tensorboard"
 
-    for i, (imgs, caps) in enumerate(train_data_loader):
+    # model config
+    max_cap_len: int = 20
+
+    vocab_size = len(vocab)
+    hidden_size = 512
+    feature_size = 1536
+    embedding_size = 512
+    attn_size = 512
+    dropout = 0.1
+
+    # data config
+    json_file = "~/.dataset/dataset_flickr8k.json"
+    image_folder = "~/.dataset/flickr8k"
+
+class CaptionModel(TrainerModel):
+    def __init__(self, vocab, config):
+        super().__init__()
+
+        self.vocab = vocab
+        self.encoder = Encoder()
+        self.decoder = Decoder(
+            config.vocab_size, config.hidden_size, config.feature_size, config.embedding_size, config.attn_size, config.dropout)
+
+    def forward(self, images, captions):
+        scores = self.decoder(
+            self.encoder(images),
+            captions)
+        return scores
+
+    def train_step(self, batch, criterion):
+        images, caps = batch
         captions_in = caps[:, :-1]  # N, T-1
         targets = caps[:, 1:]  # N, T-1
+        logits = self(images, captions_in)
+        logits = logits.permute(0, 2, 1) # N, T, V -> N, V, T
+        loss = criterion(logits, targets)
+        return {"model_outputs": logits}, {"loss": loss}
 
-        scores = model((imgs, captions_in), True)
+    def eval_step(self, batch, criterion):
+        images, caps = batch
+        captions_in = caps[:, :-1]  # N, T-1
+        targets = caps[:, 1:]  # N, T-1
+        logits = self(images, captions_in)
+        logits = logits.permute(0, 2, 1) # N, T, V -> N, V, T
+        loss = criterion(logits, targets)
+        return {"model_outputs": logits}, {"loss": loss}
 
-        # Exclude <pad> token from loss computation
-        pad_mask = targets == vocab['<pad>'] # N, T-1
-        scores = scores.permute(0, 2, 1) # N, C, T-1
-        scores = scores.masked_fill(pad_mask.unsqueeze(1), float('-inf'))
+    @staticmethod
+    def get_criterion():
+        return torch.nn.CrossEntropyLoss()
 
-        loss = loss_fn(scores, targets)
-        total_loss += loss.item()
-        num_batches += 1
+    def get_data_loader(
+        self, config, assets, is_eval, samples, verbose, num_gpus, rank=0
+    ):  # pylint: disable=unused-argument
+        train_loader, val_loader, test_loader = build_data_loader(
+            json_file=config.json_file, 
+            image_folder=config.image_folder,
+            transform=inception_transform,
+            token_processer=TokenEncoder(self.vocab, config.max_cap_len),
+            batch_size=config.batch_size,
+            max_train=config.max_train,
+            max_val=config.max_val)
+        if is_eval:
+            return val_loader
+        else:
+            return train_loader
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-    
-    avg_loss = total_loss / num_batches
-    print(f"Average loss: {avg_loss}")
+def main():
+    # %%
+    # init args and config
+    train_args = TrainerArgs()
+
+    config = CaptionModelConfig(
+        lr=1e-3,
+        optimizer_params={ 'weight_decay': 1e-4, },
+        lr_scheduler_params={ 'step_size': 20, 'gamma': 0.1 },
+    )
+
+    # init the model from config
+    model = CaptionModel(vocab)
+
+    # init the trainer and 🚀
+    trainer = Trainer(
+        train_args,
+        config,
+        config.output_path,
+        model=model,
+        train_samples=model.get_data_loader(config, None, False, None, None, None),
+        eval_samples=model.get_data_loader(config, None, True, None, None, None),
+        parse_command_line_args=True,
+    )
+
+    # %%
+    trainer.fit()
 
 
-def train(vocab, train_loader, valid_loader, test_loader, n_epoch=10):
-    model = Decoder(vocab_size, hidden_size, feature_size, embedding_size, num_layers, dropout)
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
-
-    for _ in range(n_epoch):
-        epoch(model, train_loader, optimizer)
-
-train_transform = inception_transform
-train_loader, valid_loader, test_loader = build_data_loader(
-    json_file=json_file, 
-    image_folder=image_folder,
-    transform=train_transform,
-    token_processer=TokenEncoder(vocab, max_cap_len),
-    batch_size=1)
-
-# %%
-train(vocab, train_loader, valid_loader, test_loader, n_epoch=10)
+if __name__ == "__main__":
+    main()
