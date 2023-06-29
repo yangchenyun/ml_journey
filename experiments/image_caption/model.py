@@ -1,10 +1,12 @@
 # %%
+import h5py
+import sklearn.decomposition as decomposition
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import timm
 
-from data import build_data_loader, TokenEncoder, vocab
+from data import build_data_loader, build_extracted_data_loader, TokenEncoder, Vocabulary
 
 
 # %% Create the inceptionv4 model
@@ -24,12 +26,7 @@ def restore_img(img, config):
     """
     return img * np.array(config['mean']) + np.array(config['std'])
 
-train_loader, valid_loader, test_loader = build_data_loader(
-    json_file="~/.dataset/dataset_flickr8k.json", 
-    image_folder="~/.dataset/flickr8k",
-    transform=transform, 
-    token_processer=TokenEncoder(vocab, 20),
-    batch_size=8)
+vocab = Vocabulary.load("flickr8k_vocab.json")
 
 # %% Test the model's features
 def load_inception_classes():
@@ -247,26 +244,11 @@ class Decoder(torch.nn.Module):
 
             return captions
 
-
-dec = Decoder(len(vocab), 512, 1536, 512, 512, 0.5)
-if False:
-    total_params = sum(p.numel() for p in dec.parameters() if p.requires_grad)
-    print(f"Total trainable parameters: {total_params}")
-    print(f"Number of word embedding encoder parameters: {sum(p.numel() for p in dec.embd.parameters() if p.requires_grad)}")
-    print(f"Number of attention layer parameters: {sum(p.numel() for p in dec.attn.parameters() if p.requires_grad)}")
-    print(f"Number of LSTM cell parameters: {sum(p.numel() for p in dec.rnn.parameters() if p.requires_grad)}")
-    print(f"Number of linear layer parameters: {sum(p.numel() for p in dec.fc.parameters() if p.requires_grad)}")
-
-# %%
-enc = Encoder()
-images, captions = next(iter(train_loader))
-preds = dec(enc(images), captions)
-word_idxs = torch.argmax(
-    torch.nn.functional.softmax(preds, dim=2), dim=2)
- 
 def decode_caption(word_idxs, vocab):
     """
     Greedy algorithm to find the index in the vocab and return the text.
+    Extracts features from the data in data_loader using an encoder.
+    Features are processed using IncrementalPCA, and everything is saved to an h5py file.
     """
     captions = []
     for pred in word_idxs:
@@ -278,6 +260,96 @@ def decode_caption(word_idxs, vocab):
         captions.append(' '.join(caption))
     return captions
 
-captions = decode_caption(word_idxs, vocab)
-# print(captions[0])
-print(decode_caption(dec.sample(enc(images), 20), vocab))
+# %%
+def feature_extractor(data_loader, output_file, pca_dim=512):
+    """
+    Extracts features from the data in data_loader using an encoder.
+    Features are processed using IncrementalPCA, and everything is saved to an h5py file.
+    """
+    enc = Encoder()
+    enc.eval()
+
+    pixels = 8*8
+    feature_dim = 1536
+    max_length = 20 + 2
+
+    # Set up PCA
+    ipca = decomposition.IncrementalPCA(n_components=pca_dim)
+    
+    with h5py.File(output_file, 'w') as f:
+        # Create datasets in the file
+        orig_dset = f.create_dataset('features_orig', (0, pixels, feature_dim), maxshape=(None, pixels, feature_dim), dtype='float32')
+        pca_dset = f.create_dataset('features_pca', (0, pixels, pca_dim), maxshape=(None, pixels, pca_dim), dtype='float32')
+        captions_dset = f.create_dataset('captions', (0, max_length), maxshape=(None, max_length), dtype='int64')
+
+        with torch.no_grad():
+            for i, (images, captions) in enumerate(data_loader):
+                # Add logger to print batch index and batch length
+                print(f"Processing batch #{i} with {len(images)} images")
+
+                # Extract features
+                features = enc(images)
+                N, pixels, C = features.shape
+                reshaped_features = features.reshape(-1, C)  # Reshape to 2D (N * pixels, C)
+                
+                # Compute PCA
+                ipca.partial_fit(reshaped_features)
+                pca_features = ipca.transform(reshaped_features)
+                pca_features = pca_features.reshape(N, pixels, -1) # Reshape back to 3D
+                
+                # Save original features
+                orig_dset.resize((orig_dset.shape[0] + N, pixels, feature_dim))
+                orig_dset[-N:] = features
+                
+                # Save PCA features
+                pca_dset.resize((pca_dset.shape[0] + N, pixels, pca_dim))
+                pca_dset[-N:] = pca_features
+
+                # Save captions
+                captions_dset.resize((captions_dset.shape[0] + N, max_length))
+                captions_dset[-N:] = captions
+
+
+if __name__ == "__main__":
+    # %% Verify the extractor and data loader work as expected
+    train_loader, val_loader, test_loader = build_data_loader(
+        json_file="~/.dataset/dataset_flickr8k.json", 
+        image_folder="~/.dataset/flickr8k",
+        transform=transform, 
+        token_processer=TokenEncoder(vocab, 20),
+        train_shuffle=False,
+        batch_size=8,
+        max_train=32)
+
+    feature_extractor(train_loader, 'flickr8k_train_features.h5')
+    # feature_extractor(test_loader, 'flickr8k_test_features.h5')
+    # feature_extractor(val_loader, 'flickr8k_val_features.h5')
+
+    extracted_train_loader = build_extracted_data_loader(
+        "flickr8k_train_features.h5", pca=False, batch_size=8)
+
+    enc = Encoder()
+    for i, (extracted_data, original_data) in enumerate(zip(extracted_train_loader, train_loader)):
+        orig_images, orig_captions = original_data
+        extracted_features, extracted_captions = extracted_data
+        assert torch.allclose(orig_captions, extracted_captions, rtol=1e-03, atol=1e-03)
+        assert torch.allclose(enc(orig_images), extracted_features, rtol=1e-03, atol=1e-03)
+
+    if False:
+        enc = Encoder()
+        images, captions = next(iter(train_loader))
+        word_idxs = torch.argmax(
+            torch.nn.functional.softmax(preds, dim=2), dim=2)
+
+        dec = Decoder(len(vocab), 512, 1536, 512, 512, 0.5)
+        total_params = sum(p.numel() for p in dec.parameters() if p.requires_grad)
+        print(f"Total trainable parameters: {total_params}")
+        print(f"Number of word embedding encoder parameters: {sum(p.numel() for p in dec.embd.parameters() if p.requires_grad)}")
+        print(f"Number of attention layer parameters: {sum(p.numel() for p in dec.attn.parameters() if p.requires_grad)}")
+        print(f"Number of LSTM cell parameters: {sum(p.numel() for p in dec.rnn.parameters() if p.requires_grad)}")
+        print(f"Number of linear layer parameters: {sum(p.numel() for p in dec.fc.parameters() if p.requires_grad)}")
+
+        preds = dec(enc(images), captions)
+        captions = decode_caption(word_idxs, vocab)
+        # print(captions[0])
+        print(decode_caption(dec.sample(enc(images), 20), vocab))

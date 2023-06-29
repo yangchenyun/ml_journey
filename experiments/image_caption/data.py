@@ -9,7 +9,10 @@ import torchvision
 from PIL import Image
 import matplotlib.pyplot as plt
 
-num_cores = 8
+import h5py
+import numpy as np
+
+num_cores = 0
 
 # %%
 # Dataset Loader
@@ -88,6 +91,52 @@ class CaptionDataset(torch.utils.data.Dataset):
 
             return image, tokens
 
+
+# %% 
+class ExtractedCaptionDataset(torch.utils.data.Dataset):
+    """Dataset with extracted features."""
+    def __init__(self,
+                 feat_file,
+                 pca=False):
+        """
+        A PyTorch Dataset class to load image-caption pairs from the Andrew Karpathy Image Caption File.
+
+        Args:
+            feat_file: h5py file with pre-computed features.
+        """
+        self.pca = pca
+
+        with h5py.File(feat_file, "r") as f:
+            self.features = np.asarray(f["features_orig"])
+            self.pca_features = np.asarray(f["features_pca"])
+            self.captions = np.asarray(f["captions"])
+
+        assert len(self.features) == len(self.captions)
+                
+    def __len__(self):
+        return len(self.captions)
+    
+    def __str__(self):
+        return f"ExtractedCaptionDataset(size={len(self)})"
+
+    def __getitem__(self, idx):
+        if isinstance(idx, slice):
+            indices = range(*idx.indices(len(self)))
+            dataset = copy.deepcopy(self)
+            dataset.features = [dataset.features[ii] for ii in indices]
+            dataset.pca_features = [dataset.pca_features[ii] for ii in indices]
+            dataset.captions = [dataset.captions[ii] for ii in indices]
+            return dataset
+        else:
+            if self.pca:
+                n_feature = self.pca_features[idx]
+            else:
+                n_feature = self.features[idx]
+
+            n_tokens = self.captions[idx]
+            return n_feature, n_tokens
+
+
 # %%
 def plot_image_caption_grid(dataset, num_images=4):
     fig, axs = plt.subplots(nrows=num_images, figsize=(10, 10))
@@ -159,7 +208,6 @@ class Vocabulary:
     @staticmethod
     def from_corpus(corpus, min_word_freq=1):
         """
-        :param special_tokens, special <start>, <end>, <null> tokens
         :param min_word_freq: words occuring less frequently than this threshold are binned as <unk>s
         """
         vocab = Vocabulary(default_word='<null>', default_idx=0)
@@ -187,7 +235,7 @@ class Vocabulary:
         with open(input_file, 'r') as f:
             data = json.load(f)
 
-        vocab = Vocabulary(default_word='<unk>', default_idx=3)
+        vocab = Vocabulary(default_word='<null>', default_idx=0)
         vocab.word2idx = data['word2idx']
         vocab.idx2word = {int(k): v for k, v in data['idx2word'].items()}
         vocab.idx = data['idx']
@@ -203,6 +251,7 @@ def build_data_loader(json_file, image_folder,
                       transform=None,
                       token_processer=None,
                       batch_size=128,
+                      train_shuffle=True,
                       max_train=None,
                       max_val=None):
     train_dataset = CaptionDataset(
@@ -230,7 +279,7 @@ def build_data_loader(json_file, image_folder,
         val_dataset = val_dataset[:max_val]
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size,
-                                               shuffle=True,
+                                               shuffle=train_shuffle,
                                                num_workers = num_cores)
     valid_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=batch_size, shuffle=False)
@@ -238,6 +287,24 @@ def build_data_loader(json_file, image_folder,
         test_dataset, batch_size=batch_size, shuffle=False)
 
     return train_loader, valid_loader, test_loader
+
+
+def build_extracted_data_loader(feat_file,
+                                pca=False,
+                                batch_size=128,
+                                max_sample=None,
+                                shuffle=False):
+    dataset = ExtractedCaptionDataset(feat_file, pca)
+
+    if max_sample:
+        dataset = dataset[:max_sample]
+
+    loader = torch.utils.data.DataLoader(dataset, 
+                                         batch_size=batch_size,
+                                         shuffle=shuffle,
+                                         num_workers=num_cores)
+    return loader
+
 
 class TokenEncoder:
     def __init__(self, vocab, max_len=30):
@@ -262,18 +329,26 @@ class TokenEncoder:
 
 # np.percentile(([len(s) for s in dataset.token_captions]), 98)
 
-if False:
+if __name__ == "__main__":
+    # %%
+    # dataset = CaptionDataset(
+    #     json_file="~/.dataset/dataset_flickr8k.json", 
+    #     image_folder="~/.dataset/flickr8k",
+    #     transform=None, token_processer=None
+    # )
     # vocab = Vocabulary.from_corpus(dataset.token_captions, min_word_freq=3)
+    # vocab.save("flickr8k_vocab.json")
     vocab = Vocabulary.load("flickr8k_vocab.json")
     
-    plt.figure(figsize=(10, 5))
-    plt.bar(vocab.word_freq.keys(), vocab.word_freq.values())
-    plt.title("Vocabulary Word Frequency")
-    plt.xlabel("Words")
-    plt.ylabel("Frequency (log)")
-    plt.yscale('log')
-    plt.xticks()
-    plt.show()
+    if False:
+        plt.figure(figsize=(10, 5))
+        plt.bar(vocab.word_freq.keys(), vocab.word_freq.values())
+        plt.title("Vocabulary Word Frequency")
+        plt.xlabel("Words")
+        plt.ylabel("Frequency (log)")
+        plt.yscale('log')
+        plt.xticks()
+        plt.show()
 
     transform = torchvision.transforms.Compose([
         torchvision.transforms.Resize((256, 256)),
