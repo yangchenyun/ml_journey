@@ -2,7 +2,7 @@
 from typing import Dict
 
 import torch
-from data import build_data_loader, TokenEncoder, vocab
+from data import build_data_loader, TokenEncoder, Vocabulary, build_extracted_data_loader
 from model import Decoder, Encoder, inception_transform
 from dataclasses import dataclass
 from trainer import TrainerConfig, TrainerModel, Trainer, TrainerArgs
@@ -26,7 +26,7 @@ class CaptionModelConfig(TrainerConfig):
     # model config
     max_cap_len: int = 20
 
-    vocab_size = len(vocab)
+    vocab_size = -1
     hidden_size = 512
     feature_size = 1536
     embedding_size = 512
@@ -90,19 +90,68 @@ class CaptionModel(TrainerModel):
         else:
             return train_loader
 
+
+class ExtractedCaptionModel(TrainerModel):
+    """CaptionModel use extracted features as input."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.decoder = Decoder(
+            config.vocab_size, config.hidden_size, config.feature_size, config.embedding_size, config.attn_size, config.dropout)
+
+    def forward(self, features, captions):
+        scores = self.decoder(features, captions)
+        return scores
+
+    def train_step(self, batch, criterion):
+        features, caps = batch
+        captions_in = caps[:, :-1]  # N, T-1
+        targets = caps[:, 1:]  # N, T-1
+        logits = self(features, captions_in)
+        logits = logits.permute(0, 2, 1) # N, T, V -> N, V, T
+        loss = criterion(logits, targets)
+        return {"model_outputs": logits}, {"loss": loss}
+
+    def eval_step(self, batch, criterion):
+        features, caps = batch
+        captions_in = caps[:, :-1]  # N, T-1
+        targets = caps[:, 1:]  # N, T-1
+        logits = self(features, captions_in)
+        logits = logits.permute(0, 2, 1) # N, T, V -> N, V, T
+        loss = criterion(logits, targets)
+        return {"model_outputs": logits}, {"loss": loss}
+
+    @staticmethod
+    def get_criterion():
+        return torch.nn.CrossEntropyLoss()
+
+    def get_data_loader(
+        self, config, assets, is_eval, samples, verbose, num_gpus, rank=0
+    ):  # pylint: disable=unused-argument
+        if is_eval:
+            val_loader = build_extracted_data_loader("flickr8k_val_features.h5", pca=True)
+            return val_loader
+        else:
+            train_loader = build_extracted_data_loader("flickr8k_train_features.h5", pca=True, shuffle=True)
+            return train_loader
+
 def main():
     # %%
     # init args and config
     train_args = TrainerArgs()
 
+    vocab = Vocabulary.load("flickr8k_vocab.json")
+
     config = CaptionModelConfig(
         lr=1e-3,
         optimizer_params={ 'weight_decay': 1e-4, },
         lr_scheduler_params={ 'step_size': 20, 'gamma': 0.1 },
+        vocab_size = len(vocab),
     )
 
     # init the model from config
-    model = CaptionModel(vocab)
+    # model = CaptionModel(vocab)
+    model = ExtractedCaptionModel()
 
     # init the trainer and 🚀
     trainer = Trainer(
