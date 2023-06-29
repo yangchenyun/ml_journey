@@ -2,6 +2,7 @@
 import json
 import os
 import random
+import copy
 import torch
 import torchvision
 
@@ -65,11 +66,10 @@ class CaptionDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         if isinstance(idx, slice):
             indices = range(*idx.indices(len(self)))
-            dataset = CaptionDataset(
-                self.json_file, self.image_folder, self.transform)
-            dataset.image_filenames = [self.image_filenames[ii] for ii in indices]
-            dataset.raw_captions = [self.raw_captions[ii] for ii in indices]
-            dataset.token_captions = [self.token_captions[ii] for ii in indices]
+            dataset = copy.deepcopy(self)
+            dataset.image_filenames = [dataset.image_filenames[ii] for ii in indices]
+            dataset.raw_captions = [dataset.raw_captions[ii] for ii in indices]
+            dataset.token_captions = [dataset.token_captions[ii] for ii in indices]
             return dataset
         else:
             image_path = self.image_filenames[idx]
@@ -160,7 +160,7 @@ class Vocabulary:
         """
         vocab = Vocabulary(default_word='<unk>', default_idx=3)
 
-        special_tokens=['<pad>', '<start>', '<end>', '<unk>']
+        special_tokens=['<null>', '<start>', '<end>', '<unk>']
         for token in special_tokens:
             vocab.add_word(token)
 
@@ -209,7 +209,9 @@ vocab.load("flickr8k_vocab.json")
 def build_data_loader(json_file, image_folder, 
                       transform=None, 
                       token_processer=None,
-                      batch_size=128):
+                      batch_size=128,
+                      max_train=None,
+                      max_val=None):
     train_dataset = CaptionDataset(
         json_file=json_file, 
         image_folder=image_folder, 
@@ -229,9 +231,13 @@ def build_data_loader(json_file, image_folder,
         token_processer=token_processer,
         split='test')
 
+    if max_train:
+        train_dataset = train_dataset[:max_train]
+    if max_val:
+        val_dataset = val_dataset[:max_val]
+
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size,
                                                shuffle=True)
-
     valid_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=batch_size, shuffle=False)
     test_loader = torch.utils.data.DataLoader(
