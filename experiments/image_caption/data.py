@@ -9,6 +9,8 @@ import torchvision
 from PIL import Image
 import matplotlib.pyplot as plt
 
+num_cores = 8
+
 # %%
 # Dataset Loader
 
@@ -109,10 +111,12 @@ from collections import Counter, defaultdict
 
 class Vocabulary:
     def __init__(self, default_idx=None, default_word=None):
-        self.word2idx = defaultdict(lambda: default_idx)  # NOTE:  <unk> index
-        self.idx2word = defaultdict(lambda: default_word)
+        self.word2idx = {}
+        self.idx2word = {}
         self.idx = 0
         self.word_freq = Counter()
+        self.default_idx = default_idx
+        self.default_word = default_word
         
     def add_word(self, word):
         if word not in self.word2idx:
@@ -140,9 +144,9 @@ class Vocabulary:
 
     def __getitem__(self, idx):
         if isinstance(idx, int):
-            return self.idx2word[idx]
+            return self.idx2word.get(idx, self.default_word)
         elif isinstance(idx, str):
-            return self.word2idx[idx]
+            return self.word2idx.get(idx, self.default_idx)
         else:
             raise ValueError(f"Invalid argument type: {type(idx)}")
 
@@ -158,7 +162,7 @@ class Vocabulary:
         :param special_tokens, special <start>, <end>, <null> tokens
         :param min_word_freq: words occuring less frequently than this threshold are binned as <unk>s
         """
-        vocab = Vocabulary(default_word='<unk>', default_idx=3)
+        vocab = Vocabulary(default_word='<null>', default_idx=0)
 
         special_tokens=['<null>', '<start>', '<end>', '<unk>']
         for token in special_tokens:
@@ -178,36 +182,25 @@ class Vocabulary:
         with open(output_file, 'w') as f:
             json.dump({'word2idx': self.word2idx, 'idx2word': self.idx2word, 'idx': self.idx, 'word_freq': self.word_freq}, f)
 
-    def load(self, input_file):
+    @staticmethod
+    def load(input_file):
         with open(input_file, 'r') as f:
             data = json.load(f)
 
-        self.word2idx = defaultdict(lambda: data['word2idx']['<unk>'], data['word2idx'])
-        self.idx2word = defaultdict(lambda: '<unk>', {int(k): v for k, v in data['idx2word'].items()})
-        self.idx = data['idx']
-        self.word_freq = Counter(data['word_freq'])
+        vocab = Vocabulary(default_word='<unk>', default_idx=3)
+        vocab.word2idx = data['word2idx']
+        vocab.idx2word = {int(k): v for k, v in data['idx2word'].items()}
+        vocab.idx = data['idx']
+        vocab.word_freq = Counter(data['word_freq'])
 
+        return vocab
 
-
-# %%
-# vocab = Vocabulary.from_corpus(dataset.token_captions, min_word_freq=3)
-vocab = Vocabulary()
-vocab.load("flickr8k_vocab.json")
- 
-# plt.figure(figsize=(10, 5))
-# plt.bar(vocab.word_freq.keys(), vocab.word_freq.values())
-# plt.title("Vocabulary Word Frequency")
-# plt.xlabel("Words")
-# plt.ylabel("Frequency (log)")
-# plt.yscale('log')
-# plt.xticks()
-# plt.show()
 
 # %%
 # Build data loader to support train / test / validate split and batch size
 
 def build_data_loader(json_file, image_folder, 
-                      transform=None, 
+                      transform=None,
                       token_processer=None,
                       batch_size=128,
                       max_train=None,
@@ -237,7 +230,8 @@ def build_data_loader(json_file, image_folder,
         val_dataset = val_dataset[:max_val]
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size,
-                                               shuffle=True)
+                                               shuffle=True,
+                                               num_workers = num_cores)
     valid_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=batch_size, shuffle=False)
     test_loader = torch.utils.data.DataLoader(
@@ -266,12 +260,21 @@ class TokenEncoder:
                  [self.vocab['<null>']] * (self.max_len - len(tokens)))
         return torch.tensor(enc_c)
 
-vocab = Vocabulary()
-vocab.load("flickr8k_vocab.json")
-
 # np.percentile(([len(s) for s in dataset.token_captions]), 98)
 
 if False:
+    # vocab = Vocabulary.from_corpus(dataset.token_captions, min_word_freq=3)
+    vocab = Vocabulary.load("flickr8k_vocab.json")
+    
+    plt.figure(figsize=(10, 5))
+    plt.bar(vocab.word_freq.keys(), vocab.word_freq.values())
+    plt.title("Vocabulary Word Frequency")
+    plt.xlabel("Words")
+    plt.ylabel("Frequency (log)")
+    plt.yscale('log')
+    plt.xticks()
+    plt.show()
+
     transform = torchvision.transforms.Compose([
         torchvision.transforms.Resize((256, 256)),
         torchvision.transforms.ToTensor(),
