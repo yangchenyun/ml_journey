@@ -134,9 +134,25 @@ attn = Attention(512, 128, 8)
 h = torch.randn(8, 512)
 features = torch.randn(8, 128)
 attn_m = attn(h, features)
-print(attn_m.shape)
 
 # %%
+class Encoder(torch.nn.Module):
+    def __init__(self):
+        super(Encoder, self).__init__()
+        # Image encoder
+        self.encoder = timm.create_model('inception_v4', features_only=True, pretrained=True)
+        self.encoder.eval()  # Only use in eval mode
+        for p in self.encoder.parameters(): p.requires_grad = False
+        # TODO: use AvgPool explicit control the enc_dim
+
+    def forward(self, images):
+        N = images.shape[0]
+        features = self.encoder(images) # N, D, W, H
+        enc = features[-1] # Use last feature, [N, 1536, 8, 8])
+        enc = enc.reshape(N, -1, 8*8).permute(0, 2, 1) # N, W*H, D
+        return enc
+
+
 class Decoder(torch.nn.Module):
     def __init__(self, n_embd, embd_dim, enc_dim, attn_dim, hidden_size, dropout_p):
         super(Decoder, self).__init__()
@@ -148,12 +164,9 @@ class Decoder(torch.nn.Module):
         self.hidden_size = hidden_size
         self.dropout_p = dropout_p
 
-        # Image encoder
-        self.encoder = timm.create_model('inception_v4', features_only=True, pretrained=True)
-        self.encoder.eval()  # Only use in eval mode
-        for p in self.encoder.parameters(): p.requires_grad = False
-
-        # TODO: use AvgPool explicit control the enc_dim
+        self._null = vocab["<null>"]
+        self._start = vocab["<start>"]
+        self._end = vocab["<end>"]
 
         # Word embedding encoder
         self.embd = torch.nn.Embedding(n_embd, embd_dim)
@@ -180,31 +193,22 @@ class Decoder(torch.nn.Module):
         sampled_features = features @ torch.randn(WH*D, cell_size)
         return sampled_features
 
-    def forward(self, X, with_teacher=True):
+    def forward(self, features, captions):
         """
-        :param: images, (N, C, W, H)
+        :param: features, (N, pixels, C)
         :param: captions, (N, T)
         """
-        images, captions = X
-        N, C, W, H = images.shape
         N, T = captions.shape
-        features = self.encoder(images) # N, D, W, H
-        enc = features[-1] # [N, 1536, 8, 8])
-        enc = enc.reshape(N, -1, 8*8).permute(0, 2, 1) # N, W*H, D
 
         embd_tokens = self.embd(captions).permute(1, 0, 2) # T, N, W
 
         # h0, c0, (N, H)
-        h = self.init_cell(enc, self.hidden_size)
-        c = self.init_cell(enc, self.hidden_size)
+        h = self.init_cell(features, self.hidden_size)
+        c = self.init_cell(features, self.hidden_size)
         h_out = []
 
         for t in range(T):
-            if with_teacher or t == 0:
-                x_t = torch.cat((self.attn(h, enc), embd_tokens[t]), dim=1)
-            else:
-                h_t = self.embd(torch.argmax(self.fc(h), dim=1))
-                x_t = torch.cat((self.attn(h, enc), h_t), dim=1)
+            x_t = torch.cat((self.attn(h, features), embd_tokens[t]), dim=1)
             h, c = self.rnn(x_t, (h, c))
             h_out.append(h)
 
@@ -212,28 +216,60 @@ class Decoder(torch.nn.Module):
         preds = self.fc(self.dropout(h_out)).permute(1, 0, 2) # N, T, E
 
         return preds
+    
+    def sample(self, features, max_length):
+        with torch.no_grad():
+            N = features.shape[0]
+
+            # Create an empty captions tensor (where all tokens are NULL).
+            captions = self._null * np.ones((N, max_length), dtype=np.int32)
+
+            # Create a partial caption, with only the start token.
+            word = self._start * np.ones(N, dtype=np.int32)
+            word = torch.LongTensor(word)
+
+            # h0, c0, (N, H)
+            h = self.init_cell(features, self.hidden_size)
+            c = self.init_cell(features, self.hidden_size)
+
+            for t in range(max_length):
+                embd_token = self.embd(word)
+                x_t = torch.cat((self.attn(h, features), embd_token), dim=1)
+                h, c = self.rnn(x_t, (h, c))
+                output_logits = self.fc(self.dropout(h)) # 1, N, E
+
+                # Choose the most likely word ID from the vocabulary.
+                # [N, V] -> [N]
+                word = torch.argmax(output_logits, axis=1)
+
+                # Update our overall caption and our current partial caption.
+                captions[:, t] = word.numpy()
+
+            return captions
+
 
 dec = Decoder(len(vocab), 512, 1536, 512, 512, 0.5)
-total_params = sum(p.numel() for p in dec.parameters() if p.requires_grad)
-print(f"Total trainable parameters: {total_params}")
-print(f"Number of image encoder parameters: {sum(p.numel() for p in dec.encoder.parameters() if p.requires_grad)}")
-print(f"Number of word embedding encoder parameters: {sum(p.numel() for p in dec.embd.parameters() if p.requires_grad)}")
-print(f"Number of attention layer parameters: {sum(p.numel() for p in dec.attn.parameters() if p.requires_grad)}")
-print(f"Number of LSTM cell parameters: {sum(p.numel() for p in dec.rnn.parameters() if p.requires_grad)}")
-print(f"Number of linear layer parameters: {sum(p.numel() for p in dec.fc.parameters() if p.requires_grad)}")
+if False:
+    total_params = sum(p.numel() for p in dec.parameters() if p.requires_grad)
+    print(f"Total trainable parameters: {total_params}")
+    print(f"Number of word embedding encoder parameters: {sum(p.numel() for p in dec.embd.parameters() if p.requires_grad)}")
+    print(f"Number of attention layer parameters: {sum(p.numel() for p in dec.attn.parameters() if p.requires_grad)}")
+    print(f"Number of LSTM cell parameters: {sum(p.numel() for p in dec.rnn.parameters() if p.requires_grad)}")
+    print(f"Number of linear layer parameters: {sum(p.numel() for p in dec.fc.parameters() if p.requires_grad)}")
 
 # %%
-batch0 = next(iter(train_loader))
-preds = dec(batch0, False)
-logits = torch.nn.functional.softmax(preds, dim=2)
+enc = Encoder()
+images, captions = next(iter(train_loader))
+preds = dec(enc(images), captions)
+word_idxs = torch.argmax(
+    torch.nn.functional.softmax(preds, dim=2), dim=2)
  
-def decode_caption(logits, vocab):
+def decode_caption(word_idxs, vocab):
     """
     Greedy algorithm to find the index in the vocab and return the text.
     """
-    logits = torch.argmax(logits, dim=2)
     captions = []
-    for pred in logits:
+    for pred in word_idxs:
         caption = []
         for idx in pred:
             if idx == vocab['<end>']:
@@ -242,5 +278,6 @@ def decode_caption(logits, vocab):
         captions.append(' '.join(caption))
     return captions
 
-captions = decode_caption(logits, vocab)
-print(captions[0])
+captions = decode_caption(word_idxs, vocab)
+# print(captions[0])
+print(decode_caption(dec.sample(enc(images), 20), vocab))
