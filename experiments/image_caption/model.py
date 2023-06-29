@@ -16,6 +16,8 @@ model.eval()  # only in eval mode
 
 config = resolve_data_config({}, model=model)
 transform = create_transform(**config)
+inception_transform = transform
+
 def restore_img(img, config):
     """
     img: np.array
@@ -207,7 +209,7 @@ class Decoder(torch.nn.Module):
             h_out.append(h)
 
         h_out = torch.stack(h_out) # T, N, H
-        preds = self.fc(self.dropout(h_out)).permute(1, 0, 2) # T, N, E
+        preds = self.fc(self.dropout(h_out)).permute(1, 0, 2) # N, T, E
 
         return preds
 
