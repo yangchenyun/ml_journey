@@ -26,9 +26,10 @@ class CaptionModelConfig(TrainerConfig):
     # model config
     max_cap_len: int = 20
 
-    vocab_size = -1
+    vocab_size: int = -1
+
     hidden_size = 512
-    feature_size = 1536
+    feature_size = 512 # use pca features
     embedding_size = 512
     attn_size = 512
     dropout = 0.1
@@ -150,8 +151,8 @@ def main():
     )
 
     # init the model from config
-    # model = CaptionModel(vocab)
-    model = ExtractedCaptionModel()
+    # model = CaptionModel(vocab, config)
+    model = ExtractedCaptionModel(config)
 
     # init the trainer and 🚀
     trainer = Trainer(
