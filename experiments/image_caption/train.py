@@ -11,16 +11,16 @@ from trainer import TrainerConfig, TrainerModel, Trainer, TrainerArgs
 @dataclass
 class CaptionModelConfig(TrainerConfig):
     optimizer: str = "Adam"
-    lr_scheduler: str = "StepLR"
+    lr_scheduler: str = "OneCycleLR"
 
     epochs: int = 100
-    batch_size: int = 8
-    max_train: int = 64
-    max_val: int = 16
+    batch_size: int = 256
+    max_train: int = None # Force loading all data into memory
+    max_val: int = -1
 
-    print_step: int = 10
-    save_step: int = 2000
-    plot_step: int = 5
+    save_step: int = 100 
+    print_step: int = 25
+    plot_step: int = 25
     dashboard_logger: str = "tensorboard"
 
     # model config
@@ -29,7 +29,8 @@ class CaptionModelConfig(TrainerConfig):
     vocab_size: int = -1
 
     hidden_size = 512
-    feature_size = 512 # use pca features
+    full_feature_size = 1536
+    pca_feature_size = 512
     embedding_size = 512
     attn_size = 512
     dropout = 0.1
@@ -42,10 +43,12 @@ class CaptionModel(TrainerModel):
     def __init__(self, vocab, config):
         super().__init__()
 
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.vocab = vocab
-        self.encoder = Encoder()
+        self.encoder = Encoder().to(self.device)
         self.decoder = Decoder(
-            config.vocab_size, config.hidden_size, config.feature_size, config.embedding_size, config.attn_size, config.dropout)
+            config.vocab_size, config.hidden_size, config.full_feature_size, config.embedding_size, config.attn_size, config.dropout)\
+                    .to(self.device)
 
     def forward(self, images, captions):
         scores = self.decoder(
@@ -55,21 +58,17 @@ class CaptionModel(TrainerModel):
 
     def train_step(self, batch, criterion):
         images, caps = batch
-        captions_in = caps[:, :-1]  # N, T-1
-        targets = caps[:, 1:]  # N, T-1
-        logits = self(images, captions_in)
-        logits = logits.permute(0, 2, 1) # N, T, V -> N, V, T
-        loss = criterion(logits, targets)
-        return {"model_outputs": logits}, {"loss": loss}
+        images = images.to(self.device)
+        caps = caps.to(self.device)
 
-    def eval_step(self, batch, criterion):
-        images, caps = batch
         captions_in = caps[:, :-1]  # N, T-1
         targets = caps[:, 1:]  # N, T-1
         logits = self(images, captions_in)
         logits = logits.permute(0, 2, 1) # N, T, V -> N, V, T
         loss = criterion(logits, targets)
         return {"model_outputs": logits}, {"loss": loss}
+    
+    eval_step = train_step
 
     @staticmethod
     def get_criterion():
@@ -95,10 +94,14 @@ class CaptionModel(TrainerModel):
 class ExtractedCaptionModel(TrainerModel):
     """CaptionModel use extracted features as input."""
 
-    def __init__(self, config):
+    def __init__(self, config, pca=True):
         super().__init__()
+        self.pca = pca
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        feature_size = config.pca_feature_size if pca else config.full_feature_size
         self.decoder = Decoder(
-            config.vocab_size, config.hidden_size, config.feature_size, config.embedding_size, config.attn_size, config.dropout)
+            config.vocab_size, config.hidden_size, feature_size, config.embedding_size, config.attn_size, config.dropout)\
+                    .to(self.device)
 
     def forward(self, features, captions):
         scores = self.decoder(features, captions)
@@ -106,6 +109,8 @@ class ExtractedCaptionModel(TrainerModel):
 
     def train_step(self, batch, criterion):
         features, caps = batch
+        features = features.to(self.device)
+        caps = caps.to(self.device)
         captions_in = caps[:, :-1]  # N, T-1
         targets = caps[:, 1:]  # N, T-1
         logits = self(features, captions_in)
@@ -113,14 +118,7 @@ class ExtractedCaptionModel(TrainerModel):
         loss = criterion(logits, targets)
         return {"model_outputs": logits}, {"loss": loss}
 
-    def eval_step(self, batch, criterion):
-        features, caps = batch
-        captions_in = caps[:, :-1]  # N, T-1
-        targets = caps[:, 1:]  # N, T-1
-        logits = self(features, captions_in)
-        logits = logits.permute(0, 2, 1) # N, T, V -> N, V, T
-        loss = criterion(logits, targets)
-        return {"model_outputs": logits}, {"loss": loss}
+    eval_step = train_step
 
     @staticmethod
     def get_criterion():
@@ -130,10 +128,19 @@ class ExtractedCaptionModel(TrainerModel):
         self, config, assets, is_eval, samples, verbose, num_gpus, rank=0
     ):  # pylint: disable=unused-argument
         if is_eval:
-            val_loader = build_extracted_data_loader("flickr8k_val_features.h5", pca=True)
+            val_loader = build_extracted_data_loader(
+                    "flickr8k_val_features.h5", 
+                    batch_size=config.batch_size,
+                    max_sample=config.max_val,
+                    pca=self.pca)
             return val_loader
         else:
-            train_loader = build_extracted_data_loader("flickr8k_train_features.h5", pca=True, shuffle=True)
+            train_loader = build_extracted_data_loader(
+                    "flickr8k_train_features.h5", 
+                    shuffle=True,
+                    batch_size=config.batch_size,
+                    max_sample=config.max_train,
+                    pca=self.pca)
             return train_loader
 
 def main():
@@ -144,15 +151,22 @@ def main():
     vocab = Vocabulary.load("flickr8k_vocab.json")
 
     config = CaptionModelConfig(
-        lr=1e-3,
         optimizer_params={ 'weight_decay': 1e-4, },
-        lr_scheduler_params={ 'step_size': 20, 'gamma': 0.1 },
+        # lr=4e-4,
+        lr_scheduler_params={ 
+                             'max_lr': 1e-3,
+                             'div_factor': 10,
+                             'final_div_factor': 4,
+                             'epochs': 100,
+                             'steps_per_epoch': 118,
+                             'pct_start': 0.25,
+                             },
         vocab_size = len(vocab),
     )
 
     # init the model from config
     # model = CaptionModel(vocab, config)
-    model = ExtractedCaptionModel(config)
+    model = ExtractedCaptionModel(config, pca=True)
 
     # init the trainer and 🚀
     trainer = Trainer(
