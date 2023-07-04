@@ -105,36 +105,37 @@ class ExtractedCaptionDataset(torch.utils.data.Dataset):
             feat_file: h5py file with pre-computed features.
         """
         self.pca = pca
+        self.feat_file = feat_file
 
-        with h5py.File(feat_file, "r") as f:
-            self.features = np.asarray(f["features_orig"])
-            self.pca_features = np.asarray(f["features_pca"])
-            self.captions = np.asarray(f["captions"])
+        self._f = h5py.File(feat_file, "r") 
+        self._features = self._f["features_orig"]
+        self._pca_features = self._f["features_pca"]
+        self._captions = self._f["captions"]
 
-        assert len(self.features) == len(self.captions)
+        assert len(self._features) == len(self._captions)
+        assert len(self._features) == len(self._pca_features)
                 
     def __len__(self):
-        return len(self.captions)
+        return len(self._features)
     
     def __str__(self):
         return f"ExtractedCaptionDataset(size={len(self)})"
 
     def __getitem__(self, idx):
         if isinstance(idx, slice):
-            indices = range(*idx.indices(len(self)))
-            dataset = copy.deepcopy(self)
-            dataset.features = [dataset.features[ii] for ii in indices]
-            dataset.pca_features = [dataset.pca_features[ii] for ii in indices]
-            dataset.captions = [dataset.captions[ii] for ii in indices]
+            dataset = ExtractedCaptionDataset(self.feat_file, self.pca)
+            dataset._features = dataset._features[idx]
+            dataset._pca_features = dataset._pca_features[idx]
+            dataset._captions = dataset._captions[idx]
             return dataset
         else:
             if self.pca:
-                n_feature = self.pca_features[idx]
+                n_feature = self._pca_features[idx]
             else:
-                n_feature = self.features[idx]
+                n_feature = self._features[idx]
 
-            n_tokens = self.captions[idx]
-            return n_feature, n_tokens
+            n_tokens = self._captions[idx]
+            return np.asarray(n_feature), np.asarray(n_tokens)
 
 
 # %%
