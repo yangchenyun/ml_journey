@@ -187,7 +187,7 @@ class Decoder(torch.nn.Module):
         """
         N, WH, D = features.shape
         features = features.reshape(N, -1)
-        sampled_features = features @ torch.randn(WH*D, cell_size)
+        sampled_features = features @ torch.randn(WH*D, cell_size, device=features.device)
         return sampled_features
 
     def forward(self, features, captions):
